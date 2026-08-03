@@ -166,6 +166,38 @@ background-image:radial-gradient(ellipse 500px 400px at 15% 25%,rgba(200,57,10,.
 .ticker-in{display:flex;gap:32px;animation:tk 22s linear infinite;white-space:nowrap;font-size:11.5px;font-weight:700}
 .ticker-in span{display:flex;align-items:center;gap:5px}
 @keyframes tk{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.pdov{position:absolute;inset:0;background:rgba(0,0,0,.55);z-index:50;opacity:0;pointer-events:none;transition:opacity .25s}
+.pdov.on{opacity:1;pointer-events:auto}
+.pdsheet{position:absolute;left:0;right:0;bottom:0;height:93%;background:var(--s0);border-radius:28px 28px 0 0;z-index:51;transform:translateY(101%);transition:transform .32s cubic-bezier(.32,.72,0,1);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,.22)}
+.pdsheet.on{transform:translateY(0)}
+.pdgrab{width:38px;height:4px;border-radius:2px;background:var(--t3);margin:9px auto 0;flex-shrink:0}
+.pdclose{position:absolute;top:14px;right:14px;width:32px;height:32px;border-radius:16px;background:var(--s2);border:none;color:var(--t1);font-size:14px;cursor:pointer;z-index:5;display:flex;align-items:center;justify-content:center;font-family:inherit;font-weight:700}
+.pdscroll{flex:1;overflow-y:auto;scrollbar-width:none}
+.pdscroll::-webkit-scrollbar{display:none}
+.pdimg{height:250px;display:flex;align-items:center;justify-content:center;position:relative;background:#F8F6F2;margin:8px 16px 0;border-radius:20px;overflow:hidden}
+.pdimg img{max-width:78%;max-height:210px;object-fit:contain;filter:drop-shadow(0 6px 18px rgba(0,0,0,.13))}
+.pdinfo{padding:16px 20px 0}
+.pdbrand{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--p);background:var(--pbg);padding:4px 10px;border-radius:6px;margin-bottom:9px}
+.pdname{font-size:21px;font-weight:900;line-height:1.2;letter-spacing:-.4px;margin-bottom:4px}
+.pdunit{font-size:13px;color:var(--t2);font-weight:600;margin-bottom:14px}
+.pdprow{display:flex;align-items:baseline;gap:8px;margin-bottom:3px}
+.pdprice{font-size:28px;font-weight:900;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.pdmrp{font-size:14px;color:var(--t2);text-decoration:line-through;font-variant-numeric:tabular-nums}
+.pdoff{font-size:11px;font-weight:800;color:var(--g);background:var(--gbg);padding:3px 8px;border-radius:5px}
+.pdtax{font-size:11px;color:var(--t2);margin-bottom:16px}
+.pddel{display:flex;align-items:center;gap:10px;background:var(--gbg);border-radius:12px;padding:11px 13px;margin:0 20px 18px}
+.pddel div{font-size:11.5px;color:#15803D;font-weight:700;line-height:1.4}
+.pdsec{padding:0 20px;margin-bottom:18px}
+.pdsect{font-size:13px;font-weight:800;margin-bottom:9px}
+.pdrow{display:flex;justify-content:space-between;font-size:12.5px;padding:9px 0;border-bottom:1px solid var(--bdl);color:var(--t1)}
+.pdrow span:last-child{font-weight:700;color:var(--t0)}
+.pdbar{flex-shrink:0;border-top:1px solid var(--bd);background:var(--s0);padding:12px 16px;display:flex;align-items:center;gap:12px}
+.pdbarl{font-size:10px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.pdbarv{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums}
+.pdadd{flex:1;padding:15px;background:linear-gradient(135deg,#B82800,#C8390A,#D84A18);color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px rgba(200,57,10,.32)}
+.pdqc{flex:1;display:flex;align-items:center;justify-content:space-between;background:var(--pbg);border-radius:14px;padding:5px 10px}
+.pdqb{width:38px;height:38px;border-radius:11px;border:none;background:var(--p);color:#fff;font-size:20px;font-weight:900;cursor:pointer;font-family:inherit}
+.pdqn{font-size:17px;font-weight:900;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -225,6 +257,13 @@ background-image:radial-gradient(ellipse 500px 400px at 15% 25%,rgba(200,57,10,.
     <button class="nb" id="nb-cart" onclick="sw('cart')"><div class="ndot"></div><span class="ni">🛒</span>Cart<span class="cbadge" id="cbadge">0</span></button>
     <button class="nb" id="nb-profile" onclick="sw('profile')"><div class="ndot"></div><span class="ni">👤</span>Account</button>
   </nav>
+  <div class="pdov" id="pdov" onclick="closeP()"></div>
+  <div class="pdsheet" id="pdsheet">
+    <div class="pdgrab"></div>
+    <button class="pdclose" onclick="closeP()">✕</button>
+    <div class="pdscroll" id="pdBody"></div>
+    <div class="pdbar" id="pdBar"></div>
+  </div>
 </div>
 <div class="tagline">நம்ம Market · Grace Super Market Chennai</div>
 </div>
@@ -472,13 +511,56 @@ function card(p,cls){
     ?`<button class="abtn" onclick="event.stopPropagation();add(${p.id})">+</button>`
     :`<div class="qc"><button class="qb" onclick="event.stopPropagation();rem(${p.id})">−</button><span class="qn">${q}</span><button class="qb" onclick="event.stopPropagation();add(${p.id})">+</button></div>`;
   const mrpH=p.mrp?`<span class="pmrp">₹${p.mrp}</span>`:'';
-  return`<div class="${cls||'pc'}">${imgArea(p)}<div class="pbody"><div class="pname">${p.n}</div><div class="pfoot"><div><span class="pprice">₹${p.p}</span>${mrpH}</div>${ctrl}</div></div></div>`;
+  return`<div class="${cls||'pc'}" onclick="openP(${p.id})">${imgArea(p)}<div class="pbody"><div class="pname">${p.n}</div><div class="pfoot"><div><span class="pprice">₹${p.p}</span>${mrpH}</div>${ctrl}</div></div></div>`;
+}
+
+let curD=null;
+function openP(id){const p=P.find(x=>x.id===id);if(!p)return;curD=id;paintD();document.getElementById('pdBody').scrollTop=0;document.getElementById('pdov').classList.add('on');document.getElementById('pdsheet').classList.add('on')}
+function closeP(){curD=null;document.getElementById('pdov').classList.remove('on');document.getElementById('pdsheet').classList.remove('on')}
+
+function detailImg(p){
+  const bdg=p.best?'<span class="pbdg best" style="top:12px;left:12px;right:auto">Bestseller</span>':p.sale?'<span class="pbdg sale" style="top:12px;left:12px;right:auto">'+Math.round((1-p.p/p.mrp)*100)+'% OFF</span>':p.nw?'<span class="pbdg nw" style="top:12px;left:12px;right:auto">New</span>':'';
+  const src=IMG[p.id];
+  if(src)return`<div class="pdimg"><img src="${CDN}${src}?tr=w-600,q-85" alt="${p.n}" onerror="this.style.display='none'">${bdg}</div>`;
+  const s=PKG[p.b]||{bg:'#555,#777',bc:'#FFF',tc:'rgba(255,255,255,.8)'};
+  return`<div class="pdimg" style="background:linear-gradient(150deg,${s.bg})"><div class="pkg"><div class="pkg-b" style="font-size:22px;color:${s.bc}">${p.b.toUpperCase()}</div><div class="pkg-line" style="background:${s.bc};opacity:.3;width:28%"></div><div class="pkg-t" style="font-size:14px;color:${s.tc}">${p.pl}</div><div class="pkg-e" style="font-size:56px">${p.e}</div></div>${bdg}</div>`;
+}
+
+function paintD(){
+  if(!curD)return;
+  const p=P.find(x=>x.id===curD);if(!p)return;
+  const q=cart[p.id]||0;
+  const cat=CATS.find(c=>c.k===p.c);
+  const sim=P.filter(x=>x.c===p.c&&x.id!==p.id).slice(0,6);
+  document.getElementById('pdBody').innerHTML=`${detailImg(p)}
+    <div class="pdinfo">
+      <span class="pdbrand">${p.b}</span>
+      <div class="pdname">${p.n}</div>
+      <div class="pdunit">${p.pl} · ${p.u}</div>
+      <div class="pdprow"><span class="pdprice">₹${p.p}</span>${p.mrp?`<span class="pdmrp">₹${p.mrp}</span><span class="pdoff">${Math.round((1-p.p/p.mrp)*100)}% off</span>`:''}</div>
+      <div class="pdtax">Inclusive of all taxes</div>
+    </div>
+    <div class="pddel"><span style="font-size:20px">🛵</span><div>Delivered in 10 minutes<br><span style="opacity:.75;font-weight:600">Free delivery on orders above ₹299</span></div></div>
+    <div class="pdsec">
+      <div class="pdsect">Product details</div>
+      <div class="pdrow"><span>Brand</span><span>${p.b}</span></div>
+      <div class="pdrow"><span>Pack size</span><span>${p.u}</span></div>
+      <div class="pdrow"><span>Category</span><span>${cat?cat.l:p.c}</span></div>
+      <div class="pdrow"><span>Country of origin</span><span>India</span></div>
+      <div class="pdrow" style="border:none"><span>Seller</span><span>Grace Super Market</span></div>
+    </div>
+    ${sim.length?`<div class="pdsect" style="padding:0 20px;margin-bottom:9px">Similar products</div><div class="hsc" style="padding-bottom:18px">${sim.map(x=>card(x,'pc')).join('')}</div>`:''}`;
+  document.getElementById('pdBar').innerHTML=q===0
+    ?`<div><div class="pdbarl">Price</div><div class="pdbarv">₹${p.p}</div></div><button class="pdadd" onclick="add(${p.id})">Add to cart</button>`
+    :`<div><div class="pdbarl">${q} × ₹${p.p}</div><div class="pdbarv">₹${p.p*q}</div></div><div class="pdqc"><button class="pdqb" onclick="rem(${p.id})">−</button><span class="pdqn">${q}</span><button class="pdqb" onclick="add(${p.id})">+</button></div>`;
 }
 
 function render(){
   const sg=document.getElementById('shopGrid');
   if(sg){const f=filter==='all'?P:P.filter(x=>x.c===filter);sg.innerHTML=f.map(x=>card(x,'gpc')).join('')}
   SECTIONS.forEach(s=>{const el=document.getElementById('r-'+s.c);if(el)el.innerHTML=P.filter(x=>x.c===s.c).slice(0,8).map(x=>card(x,'pc')).join('')});
+  renderFlash();
+  paintD();
   renderCart();
 }
 
