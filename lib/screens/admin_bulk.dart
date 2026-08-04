@@ -52,6 +52,7 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
   final List<_PendingPhoto> _pending = [];
   final List<_Draft> _drafts = [];
   bool _savingAll = false;
+  bool _attemptedSave = false;
 
   @override
   void dispose() {
@@ -158,10 +159,19 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
   }
 
   Future<void> _saveAll() async {
-    setState(() => _savingAll = true);
+    setState(() {
+      _savingAll = true;
+      // From here on, cards missing a required field show it in red —
+      // switched on only after a save attempt so a blank form doesn't
+      // start out looking broken.
+      _attemptedSave = true;
+    });
     var successCount = 0;
     final failures = <String>[];
 
+    // Unit is presentational only (a wide shelf photo often can't read it) —
+    // not required to save. Price is required: an item with no price can't
+    // actually be sold in the shop.
     for (final draft in _drafts.where((d) => !d.saved)) {
       final name = draft.nameController.text.trim();
       final brand = draft.brandController.text.trim();
@@ -169,7 +179,7 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
       final packLabel = draft.packLabelController.text.trim();
       final price = int.tryParse(draft.priceController.text.trim());
 
-      if (name.isEmpty || brand.isEmpty || unit.isEmpty || packLabel.isEmpty || price == null) {
+      if (name.isEmpty || brand.isEmpty || packLabel.isEmpty || price == null) {
         failures.add(name.isEmpty ? 'Unnamed product' : name);
         continue;
       }
@@ -182,7 +192,7 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
           emoji: draft.emojiController.text.trim().isEmpty
               ? '🛒'
               : draft.emojiController.text.trim(),
-          unit: unit,
+          unit: unit.isEmpty ? '1 unit' : unit,
           packLabel: packLabel,
           price: price,
           mrp: draft.mrpController.text.trim().isEmpty
@@ -208,7 +218,7 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
         content: Text(
           failures.isEmpty
               ? '$successCount products added to the catalog'
-              : '$successCount added · ${failures.length} need attention: ${failures.join(', ')}',
+              : '$successCount added · ${failures.length} still need a price (marked in red below)',
         ),
       ),
     );
@@ -253,7 +263,11 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
                         const SizedBox(height: 12),
                       ],
                       for (final draft in _drafts) ...[
-                        _DraftCard(draft: draft, onRemove: () => _removeDraft(draft)),
+                        _DraftCard(
+                          draft: draft,
+                          showErrors: _attemptedSave,
+                          onRemove: () => _removeDraft(draft),
+                        ),
                         const SizedBox(height: 12),
                       ],
                     ],
@@ -458,9 +472,10 @@ class _PendingCard extends StatelessWidget {
 
 class _DraftCard extends StatefulWidget {
   final _Draft draft;
+  final bool showErrors;
   final VoidCallback onRemove;
 
-  const _DraftCard({required this.draft, required this.onRemove});
+  const _DraftCard({required this.draft, required this.showErrors, required this.onRemove});
 
   @override
   State<_DraftCard> createState() => _DraftCardState();
@@ -560,6 +575,8 @@ class _DraftCardState extends State<_DraftCard> {
                           label: 'Price ₹',
                           controller: draft.priceController,
                           keyboardType: TextInputType.number,
+                          required: true,
+                          showError: widget.showErrors,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -628,8 +645,16 @@ class _MiniField extends StatelessWidget {
   final String label;
   final TextEditingController controller;
   final TextInputType? keyboardType;
+  final bool required;
+  final bool showError;
 
-  const _MiniField({required this.label, required this.controller, this.keyboardType});
+  const _MiniField({
+    required this.label,
+    required this.controller,
+    this.keyboardType,
+    this.required = false,
+    this.showError = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -641,20 +666,34 @@ class _MiniField extends StatelessWidget {
         children: [
           Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.t1)),
           const SizedBox(height: 4),
-          TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            style: const TextStyle(fontSize: 12),
-            decoration: InputDecoration(
-              isDense: true,
-              filled: true,
-              fillColor: c.bg,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: c.border),
-              ),
-            ),
+          // Rebuilds on every keystroke so a red border clears the moment
+          // the admin fills the field in, without needing setState wiring.
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              final isMissing = required && showError && value.text.trim().isEmpty;
+              return TextField(
+                controller: controller,
+                keyboardType: keyboardType,
+                style: const TextStyle(fontSize: 12),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: c.bg,
+                  hintText: isMissing ? 'Required' : null,
+                  hintStyle: TextStyle(color: c.primary),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: isMissing ? c.primary : c.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: isMissing ? c.primary : c.border),
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
