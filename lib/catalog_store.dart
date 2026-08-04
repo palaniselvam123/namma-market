@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'catalog.dart';
 import 'models.dart';
@@ -32,6 +33,78 @@ class CatalogStore extends ChangeNotifier {
   void addLocal(Product product) {
     kProducts.add(product);
     notifyListeners();
+  }
+
+  /// Uploads [imageBytes] (if any) to storage, inserts the product row, and
+  /// merges the result into the local catalog. Shared by the single-add form
+  /// and the bulk AI-assisted flow.
+  Future<Product> createRemoteProduct({
+    required String name,
+    required String brand,
+    required String category,
+    required String emoji,
+    required String unit,
+    required String packLabel,
+    required int price,
+    int? mrp,
+    Uint8List? imageBytes,
+  }) async {
+    String? imageUrl;
+    if (imageBytes != null) {
+      final fileName =
+          '${DateTime.now().microsecondsSinceEpoch}_${name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.jpg';
+      await supabase.storage.from('product-images').uploadBinary(fileName, imageBytes);
+      imageUrl = supabase.storage.from('product-images').getPublicUrl(fileName);
+    }
+
+    final row = await supabase
+        .from('products')
+        .insert({
+          'name': name,
+          'brand': brand,
+          'category': category,
+          'emoji': emoji,
+          'unit': unit,
+          'pack_label': packLabel,
+          'price': price,
+          'mrp': mrp,
+          'image_url': imageUrl,
+        })
+        .select()
+        .single();
+
+    final product = Product(
+      id: _remoteIdOffset + (row['id'] as int),
+      name: name,
+      brand: brand,
+      category: category,
+      emoji: emoji,
+      unit: unit,
+      packLabel: packLabel,
+      price: price,
+      mrp: mrp,
+      image: imageUrl,
+    );
+    addLocal(product);
+    return product;
+  }
+
+  /// Sends a product photo to the analyze-product-photo edge function and
+  /// returns the AI's best-guess field extraction. Throws on failure —
+  /// callers should catch and fall back to a blank/manual form.
+  Future<Map<String, dynamic>> analyzePhoto(Uint8List imageBytes) async {
+    final response = await supabase.functions.invoke(
+      'analyze-product-photo',
+      body: {
+        'image': base64Encode(imageBytes),
+        'mediaType': 'image/jpeg',
+      },
+    );
+    final data = response.data as Map<String, dynamic>;
+    if (data['error'] != null) {
+      throw Exception(data['error']);
+    }
+    return data;
   }
 
   Product _productFromRow(Map<String, dynamic> row) {

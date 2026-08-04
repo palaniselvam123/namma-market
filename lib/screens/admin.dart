@@ -3,9 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../catalog.dart';
 import '../catalog_store.dart';
-import '../models.dart';
-import '../supabase_config.dart';
 import '../theme.dart';
+import 'admin_bulk.dart';
 
 /// Client-side-only gate — enough to keep casual shoppers out of the admin
 /// panel for this POC. Not real auth: anyone reading the source (or the
@@ -64,7 +63,7 @@ class _PasswordGateState extends State<_PasswordGate> {
       color: c.bg,
       child: Column(
         children: [
-          _AdminAppBar(title: 'Admin Access'),
+          AdminAppBar(title: 'Admin Access'),
           Expanded(
             child: Center(
               child: Padding(
@@ -136,9 +135,9 @@ class _PasswordGateState extends State<_PasswordGate> {
   }
 }
 
-class _AdminAppBar extends StatelessWidget {
+class AdminAppBar extends StatelessWidget {
   final String title;
-  const _AdminAppBar({required this.title});
+  const AdminAppBar({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -277,34 +276,7 @@ class _AdminPanelState extends State<_AdminPanel> {
     });
 
     try {
-      String? imageUrl;
-      if (_imageBytes != null) {
-        final fileName =
-            '${DateTime.now().millisecondsSinceEpoch}_${name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.jpg';
-        await supabase.storage
-            .from('product-images')
-            .uploadBinary(fileName, _imageBytes!);
-        imageUrl = supabase.storage.from('product-images').getPublicUrl(fileName);
-      }
-
-      final row = await supabase
-          .from('products')
-          .insert({
-            'name': name,
-            'brand': brand,
-            'category': _category,
-            'emoji': emoji,
-            'unit': unit,
-            'pack_label': packLabel,
-            'price': price,
-            'mrp': mrp,
-            'image_url': imageUrl,
-          })
-          .select()
-          .single();
-
-      final product = Product(
-        id: 100000 + (row['id'] as int),
+      await catalogStore.createRemoteProduct(
         name: name,
         brand: brand,
         category: _category,
@@ -313,9 +285,8 @@ class _AdminPanelState extends State<_AdminPanel> {
         packLabel: packLabel,
         price: price,
         mrp: mrp,
-        image: imageUrl,
+        imageBytes: _imageBytes,
       );
-      catalogStore.addLocal(product);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -348,11 +319,61 @@ class _AdminPanelState extends State<_AdminPanel> {
       color: c.bg,
       child: Column(
         children: [
-          const _AdminAppBar(title: 'Add Product'),
+          const AdminAppBar(title: 'Add Product'),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                GestureDetector(
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const BulkAddScreen()),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF0A6818), Color(0xFF1EB040)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text('✨', style: TextStyle(fontSize: 28)),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Bulk Add with AI',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              Text(
+                                'Upload several photos — AI reads the details for you',
+                                style: TextStyle(fontSize: 11, color: Colors.white70),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right, color: Colors.white),
+                      ],
+                    ),
+                  ),
+                ),
+                Text(
+                  'Add One Product',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: c.t0,
+                  ),
+                ),
+                const SizedBox(height: 10),
                 GestureDetector(
                   onTap: _showImageSourceSheet,
                   child: Container(
