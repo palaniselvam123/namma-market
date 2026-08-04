@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'catalog.dart';
 import 'models.dart';
 import 'supabase_config.dart';
@@ -89,10 +90,12 @@ class CatalogStore extends ChangeNotifier {
     return product;
   }
 
-  /// Sends a product photo to the analyze-product-photo edge function and
-  /// returns the AI's best-guess field extraction. Throws on failure —
-  /// callers should catch and fall back to a blank/manual form.
-  Future<Map<String, dynamic>> analyzePhoto(Uint8List imageBytes) async {
+  /// Sends a photo to the analyze-product-photo edge function and returns
+  /// every product the AI could identify in it, each with a normalized
+  /// bounding box for cropping. A tight single-product photo comes back as
+  /// a list of one; a wide shelf photo can come back as many. Throws on
+  /// failure — callers should catch and fall back to a blank/manual form.
+  Future<List<Map<String, dynamic>>> analyzeShelfPhoto(Uint8List imageBytes) async {
     final response = await supabase.functions.invoke(
       'analyze-product-photo',
       body: {
@@ -104,7 +107,36 @@ class CatalogStore extends ChangeNotifier {
     if (data['error'] != null) {
       throw Exception(data['error']);
     }
-    return data;
+    final products = data['products'] as List<dynamic>? ?? [];
+    return products.cast<Map<String, dynamic>>();
+  }
+
+  /// Crops [imageBytes] to [boundingBox] (fractional x/y/width/height, 0-1),
+  /// with a small padding margin since AI-estimated boxes can run tight.
+  /// Returns the original bytes unchanged if decoding or the box is bad.
+  Uint8List cropToBoundingBox(Uint8List imageBytes, Map<String, dynamic> boundingBox) {
+    final decoded = img.decodeImage(imageBytes);
+    if (decoded == null) return imageBytes;
+
+    const pad = 0.03;
+    var x = ((boundingBox['x'] as num).toDouble() - pad).clamp(0.0, 1.0);
+    var y = ((boundingBox['y'] as num).toDouble() - pad).clamp(0.0, 1.0);
+    final width = ((boundingBox['width'] as num).toDouble() + pad * 2).clamp(0.0, 1.0 - x);
+    final height = ((boundingBox['height'] as num).toDouble() + pad * 2).clamp(0.0, 1.0 - y);
+
+    final left = (x * decoded.width).round().clamp(0, decoded.width - 1);
+    final top = (y * decoded.height).round().clamp(0, decoded.height - 1);
+    final cropWidth = (width * decoded.width).round().clamp(1, decoded.width - left);
+    final cropHeight = (height * decoded.height).round().clamp(1, decoded.height - top);
+
+    final cropped = img.copyCrop(
+      decoded,
+      x: left,
+      y: top,
+      width: cropWidth,
+      height: cropHeight,
+    );
+    return Uint8List.fromList(img.encodeJpg(cropped, quality: 85));
   }
 
   Product _productFromRow(Map<String, dynamic> row) {

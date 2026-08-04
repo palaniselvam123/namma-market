@@ -6,6 +6,14 @@ import '../catalog_store.dart';
 import '../theme.dart';
 import 'admin.dart';
 
+/// A photo the user just added, still waiting on the AI to identify what's
+/// in it. Shows as a spinner placeholder until it resolves into zero, one,
+/// or many [_Draft] cards.
+class _PendingPhoto {
+  final Uint8List bytes;
+  _PendingPhoto(this.bytes);
+}
+
 class _Draft {
   final Uint8List imageBytes;
   final nameController = TextEditingController();
@@ -17,7 +25,6 @@ class _Draft {
   final emojiController = TextEditingController(text: '🛒');
   String category = kCategories.firstWhere((c) => c.key != 'all').key;
 
-  bool analyzing = true;
   String? analyzeError;
   bool saved = false;
 
@@ -42,6 +49,7 @@ class BulkAddScreen extends StatefulWidget {
 }
 
 class _BulkAddScreenState extends State<BulkAddScreen> {
+  final List<_PendingPhoto> _pending = [];
   final List<_Draft> _drafts = [];
   bool _savingAll = false;
 
@@ -55,9 +63,9 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
 
   Future<void> _addFromGallery() async {
     final picker = ImagePicker();
-    final picked = await picker.pickMultiImage(maxWidth: 1200, imageQuality: 85);
+    final picked = await picker.pickMultiImage(maxWidth: 2000, imageQuality: 90);
     for (final file in picked) {
-      _addDraft(await file.readAsBytes());
+      _addPending(await file.readAsBytes());
     }
   }
 
@@ -65,37 +73,55 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: ImageSource.camera,
-      maxWidth: 1200,
-      imageQuality: 85,
+      maxWidth: 2000,
+      imageQuality: 90,
     );
-    if (picked != null) _addDraft(await picked.readAsBytes());
+    if (picked != null) _addPending(await picked.readAsBytes());
   }
 
-  void _addDraft(Uint8List bytes) {
-    final draft = _Draft(bytes);
-    setState(() => _drafts.add(draft));
-    _analyze(draft);
+  void _addPending(Uint8List bytes) {
+    final pending = _PendingPhoto(bytes);
+    setState(() => _pending.add(pending));
+    _analyze(pending);
   }
 
-  Future<void> _analyze(_Draft draft) async {
+  /// One photo can yield zero (nothing recognizable), one (a close-up), or
+  /// many (a shelf) products — each becomes its own cropped, editable draft.
+  Future<void> _analyze(_PendingPhoto pending) async {
     try {
-      final fields = await catalogStore.analyzePhoto(draft.imageBytes);
-      draft.nameController.text = (fields['name'] as String?) ?? '';
-      draft.brandController.text = (fields['brand'] as String?) ?? '';
-      draft.unitController.text = (fields['unit'] as String?) ?? '';
-      draft.packLabelController.text = (fields['packLabel'] as String?) ?? '';
-      final price = fields['price'];
-      draft.priceController.text = price == null ? '' : '$price';
-      final emoji = fields['emoji'] as String?;
-      if (emoji != null && emoji.isNotEmpty) draft.emojiController.text = emoji;
-      final category = fields['category'] as String?;
-      if (category != null && kCategories.any((c) => c.key == category)) {
-        draft.category = category;
+      final products = await catalogStore.analyzeShelfPhoto(pending.bytes);
+      for (final fields in products) {
+        final boundingBox = fields['boundingBox'] as Map<String, dynamic>?;
+        final cropped = boundingBox == null
+            ? pending.bytes
+            : catalogStore.cropToBoundingBox(pending.bytes, boundingBox);
+
+        final draft = _Draft(cropped);
+        draft.nameController.text = (fields['name'] as String?) ?? '';
+        draft.brandController.text = (fields['brand'] as String?) ?? '';
+        draft.unitController.text = (fields['unit'] as String?) ?? '';
+        draft.packLabelController.text = (fields['packLabel'] as String?) ?? '';
+        final price = fields['price'];
+        draft.priceController.text = price == null ? '' : '$price';
+        final emoji = fields['emoji'] as String?;
+        if (emoji != null && emoji.isNotEmpty) draft.emojiController.text = emoji;
+        final category = fields['category'] as String?;
+        if (category != null && kCategories.any((c) => c.key == category)) {
+          draft.category = category;
+        }
+        _drafts.add(draft);
+      }
+      if (products.isEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No recognizable products found in that photo')),
+        );
       }
     } catch (e) {
+      final draft = _Draft(pending.bytes);
       draft.analyzeError = 'AI couldn\'t read this photo — fill in details manually';
+      _drafts.add(draft);
     } finally {
-      if (mounted) setState(() => draft.analyzing = false);
+      if (mounted) setState(() => _pending.remove(pending));
     }
   }
 
@@ -170,7 +196,7 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
         children: [
           const AdminAppBar(title: 'Bulk Add with AI'),
           Expanded(
-            child: _drafts.isEmpty
+            child: _drafts.isEmpty && _pending.isEmpty
                 ? _EmptyState(onGallery: _addFromGallery, onCamera: _addFromCamera)
                 : ListView(
                     padding: const EdgeInsets.all(16),
@@ -195,6 +221,10 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
+                      for (final pending in _pending) ...[
+                        _PendingCard(bytes: pending.bytes),
+                        const SizedBox(height: 12),
+                      ],
                       for (final draft in _drafts) ...[
                         _DraftCard(draft: draft, onRemove: () => _removeDraft(draft)),
                         const SizedBox(height: 12),
@@ -205,7 +235,7 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
           if (_drafts.isNotEmpty) _SaveAllBar(
             count: _drafts.length,
             saving: _savingAll,
-            enabled: !_savingAll && _drafts.every((d) => !d.analyzing),
+            enabled: !_savingAll && _pending.isEmpty,
             onSave: _saveAll,
           ),
         ],
@@ -353,6 +383,52 @@ class _AddMoreButton extends StatelessWidget {
   }
 }
 
+class _PendingCard extends StatelessWidget {
+  final Uint8List bytes;
+
+  const _PendingCard({required this.bytes});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: c.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Image.memory(bytes, width: 84, height: 84, fit: BoxFit.cover),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: c.primary),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'AI is scanning for products…',
+                      style: TextStyle(fontSize: 12, color: c.t2),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DraftCard extends StatefulWidget {
   final _Draft draft;
   final VoidCallback onRemove;
@@ -385,46 +461,31 @@ class _DraftCardState extends State<_DraftCard> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(10),
-                  child: draft.analyzing
-                      ? Row(
-                          children: [
-                            SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: c.primary),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'AI is reading the photo…',
-                              style: TextStyle(fontSize: 12, color: c.t2),
-                            ),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              draft.nameController.text.isEmpty
-                                  ? 'Untitled product'
-                                  : draft.nameController.text,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                color: c.t0,
-                              ),
-                            ),
-                            if (draft.analyzeError != null)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Text(
-                                  draft.analyzeError!,
-                                  style: TextStyle(fontSize: 11, color: c.primary),
-                                ),
-                              ),
-                          ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        draft.nameController.text.isEmpty
+                            ? 'Untitled product'
+                            : draft.nameController.text,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          color: c.t0,
                         ),
+                      ),
+                      if (draft.analyzeError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            draft.analyzeError!,
+                            style: TextStyle(fontSize: 11, color: c.primary),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
               GestureDetector(
@@ -436,8 +497,7 @@ class _DraftCardState extends State<_DraftCard> {
               ),
             ],
           ),
-          if (!draft.analyzing)
-            Padding(
+          Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Column(
                 children: [
