@@ -43,6 +43,7 @@ class Shell extends StatelessWidget {
       listenable: appState,
       builder: (context, _) => Scaffold(
         backgroundColor: context.c.bg,
+        appBar: const _TopBar(),
         body: SafeArea(
           bottom: false,
           child: IndexedStack(
@@ -61,14 +62,100 @@ class Shell extends StatelessWidget {
   }
 }
 
+class _TopBar extends StatelessWidget implements PreferredSizeWidget {
+  const _TopBar();
+
+  @override
+  Size get preferredSize => const Size.fromHeight(56);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface,
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Namma MahaRaja',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: c.t0,
+                ),
+              ),
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => appState.goTab(2),
+                    child: Stack(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Text('🛒', style: const TextStyle(fontSize: 22)),
+                        ),
+                        ListenableBuilder(
+                          listenable: cart,
+                          builder: (context, _) {
+                            if (cart.count == 0) return const SizedBox.shrink();
+                            return Positioned(
+                              top: 2,
+                              right: 2,
+                              child: Container(
+                                constraints: const BoxConstraints(minWidth: 18),
+                                height: 18,
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: c.primary,
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                child: Text(
+                                  '${cart.count}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => appState.goTab(3),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Text('👤', style: const TextStyle(fontSize: 22)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BottomNav extends StatelessWidget {
   const _BottomNav();
 
   static const _tabs = [
-    ('🏠', 'Home'),
-    ('🛍️', 'Shop'),
-    ('🛒', 'Cart'),
-    ('👤', 'Account'),
+    (0, '🏠', 'Home'),
+    (1, '🛍️', 'Shop'),
   ];
 
   @override
@@ -85,12 +172,12 @@ class _BottomNav extends StatelessWidget {
           height: 62,
           child: Row(
             children: [
-              for (var i = 0; i < _tabs.length; i++)
+              for (final (index, emoji, label) in _tabs)
                 Expanded(
                   child: _NavButton(
-                    index: i,
-                    emoji: _tabs[i].$1,
-                    label: _tabs[i].$2,
+                    index: index,
+                    emoji: emoji,
+                    label: label,
                   ),
                 ),
             ],
@@ -119,72 +206,23 @@ class _NavButton extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => appState.goTab(index),
-      child: Stack(
-        alignment: Alignment.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AnimatedScale(
-                duration: const Duration(milliseconds: 180),
-                scale: active ? 1.12 : 1,
-                child: Text(emoji, style: const TextStyle(fontSize: 21)),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: active ? c.primary : c.t2,
-                ),
-              ),
-            ],
+          AnimatedScale(
+            duration: const Duration(milliseconds: 180),
+            scale: active ? 1.08 : 1,
+            child: Text(emoji, style: const TextStyle(fontSize: 22)),
           ),
-          Positioned(
-            top: 4,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 180),
-              opacity: active ? 1 : 0,
-              child: Container(
-                width: 4,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: c.primary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: c.t2,
             ),
           ),
-          if (index == 2)
-            Positioned(
-              top: 2,
-              left: 44,
-              child: ListenableBuilder(
-                listenable: cart,
-                builder: (context, _) {
-                  if (cart.count == 0) return const SizedBox.shrink();
-                  return Container(
-                    constraints: const BoxConstraints(minWidth: 17),
-                    height: 17,
-                    padding: const EdgeInsets.symmetric(horizontal: 5),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: c.primary,
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                    child: Text(
-                      '${cart.count}',
-                      style: const TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
         ],
       ),
     );
