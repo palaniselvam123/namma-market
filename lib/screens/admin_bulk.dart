@@ -85,20 +85,37 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
     _analyze(pending);
   }
 
+  /// A shelf photo often shows the same product several times (multiple
+  /// facings of one SKU) — dedupe by brand+name so each product gets only
+  /// one card, no matter how many times it's physically visible.
+  String _dedupeKey(String name, String brand) =>
+      '${brand.trim().toLowerCase()}|${name.trim().toLowerCase()}';
+
   /// One photo can yield zero (nothing recognizable), one (a close-up), or
   /// many (a shelf) products — each becomes its own cropped, editable draft.
   Future<void> _analyze(_PendingPhoto pending) async {
     try {
       final products = await catalogStore.analyzeShelfPhoto(pending.bytes);
+      var duplicateCount = 0;
       for (final fields in products) {
+        final name = ((fields['name'] as String?) ?? '').trim();
+        final brand = ((fields['brand'] as String?) ?? '').trim();
+        final key = _dedupeKey(name, brand);
+        final isDuplicate = name.isNotEmpty &&
+            _drafts.any((d) => _dedupeKey(d.nameController.text, d.brandController.text) == key);
+        if (isDuplicate) {
+          duplicateCount++;
+          continue;
+        }
+
         final boundingBox = fields['boundingBox'] as Map<String, dynamic>?;
         final cropped = boundingBox == null
             ? pending.bytes
             : catalogStore.cropToBoundingBox(pending.bytes, boundingBox);
 
         final draft = _Draft(cropped);
-        draft.nameController.text = (fields['name'] as String?) ?? '';
-        draft.brandController.text = (fields['brand'] as String?) ?? '';
+        draft.nameController.text = name;
+        draft.brandController.text = brand;
         draft.unitController.text = (fields['unit'] as String?) ?? '';
         draft.packLabelController.text = (fields['packLabel'] as String?) ?? '';
         final price = fields['price'];
@@ -111,10 +128,20 @@ class _BulkAddScreenState extends State<BulkAddScreen> {
         }
         _drafts.add(draft);
       }
-      if (products.isEmpty && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No recognizable products found in that photo')),
-        );
+      if (mounted) {
+        if (products.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No recognizable products found in that photo')),
+          );
+        } else if (duplicateCount > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Skipped $duplicateCount duplicate${duplicateCount == 1 ? '' : 's'} already in your list',
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
       final draft = _Draft(pending.bytes);
