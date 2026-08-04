@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
 import 'app_state.dart';
 import 'cart.dart';
+import 'catalog_store.dart';
 import 'screens/cart_screen.dart';
 import 'screens/home.dart';
 import 'screens/profile.dart';
 import 'screens/shop.dart';
+import 'supabase_config.dart';
 import 'theme.dart';
 import 'widgets/phone_frame.dart';
 
-void main() => runApp(const NammaMarketApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initSupabase();
+  runApp(const NammaMarketApp());
+  // Fire-and-forget: don't block first paint on the network round trip.
+  catalogStore.loadRemoteProducts();
+}
 
 class NammaMarketApp extends StatelessWidget {
   const NammaMarketApp({super.key});
@@ -40,7 +48,7 @@ class Shell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: appState,
+      listenable: Listenable.merge([appState, catalogStore]),
       builder: (context, _) => Scaffold(
         backgroundColor: context.c.bg,
         appBar: const _TopBar(),

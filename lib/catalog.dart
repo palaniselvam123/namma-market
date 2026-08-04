@@ -4,7 +4,10 @@ import 'models.dart';
 /// Products carry a real BigBasket photograph only when the photo genuinely
 /// matches that brand and pack. Everything else falls back to a brand-styled
 /// packaging card, so the shelf never shows a mismatched product.
-const List<Product> kProducts = [
+///
+/// Mutable (not const) so admin-added products fetched from Supabase can be
+/// appended at runtime — see [catalogStore].
+final List<Product> kProducts = [
   // ── Grains, Rice & Staples ──
   Product(id: 1, name: 'Aashirvaad Atta', brand: 'Aashirvaad', category: 'grains', emoji: '🌾', unit: '5 kg', packLabel: 'Whole Wheat Atta', price: 275, image: '126906_10-aashirvaad-atta-whole-wheat.jpg', flag: Flag.bestseller),
   Product(id: 2, name: 'India Gate Basmati', brand: 'India Gate', category: 'grains', emoji: '🍚', unit: '5 kg', packLabel: 'Feast Rozzana Basmati', price: 499, image: '30000590_5-india-gate-basmati-rice-feast-rozzana.jpg'),

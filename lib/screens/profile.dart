@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../widgets/brand_mark.dart';
+import 'admin.dart';
 import 'orders.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -13,6 +14,7 @@ class ProfileScreen extends StatelessWidget {
     ('🎁', 'Offers & Coupons'),
     ('💎', 'MahaRaja Rewards'),
     ('📞', 'Help & Support'),
+    ('🛠️', 'Admin Panel'),
   ];
 
   void _handleMenuTap(BuildContext context, int index) {
@@ -50,6 +52,11 @@ class ProfileScreen extends StatelessWidget {
         break;
       case 5: // Help & Support
         _showComingSoon(context, 'Help & Support');
+        break;
+      case 6: // Admin Panel
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AdminScreen()),
+        );
         break;
     }
   }

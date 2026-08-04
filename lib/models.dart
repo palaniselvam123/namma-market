@@ -43,15 +43,23 @@ class Product {
     this.flag = Flag.none,
   });
 
-  /// Real product photography, resized at the CDN edge.
-  String? imageUrl([int width = 400]) =>
-      image == null ? null : '$_cdn$image?tr=w-$width,q-80';
+  /// Real product photography, resized at the CDN edge. Admin-uploaded
+  /// photos are already full URLs (Supabase Storage) and pass through as-is;
+  /// catalog entries store a bare BigBasket filename that needs the CDN
+  /// prefix and resize query added.
+  String? imageUrl([int width = 400]) {
+    if (image == null) return null;
+    if (image!.startsWith('http')) return image;
+    return '$_cdn$image?tr=w-$width,q-80';
+  }
 
   /// Get specific view image URL by index (0=front, 1=back, 2=side, etc.)
-  String? viewImageUrl(int viewIndex, [int width = 400]) =>
-      images == null || viewIndex >= images!.length
-          ? null
-          : '${_cdn}${images![viewIndex]}?tr=w-$width,q-80';
+  String? viewImageUrl(int viewIndex, [int width = 400]) {
+    if (images == null || viewIndex >= images!.length) return null;
+    final img = images![viewIndex];
+    if (img.startsWith('http')) return img;
+    return '$_cdn$img?tr=w-$width,q-80';
+  }
 
   int get discountPct =>
       mrp == null ? 0 : (((mrp! - price) / mrp!) * 100).round();
