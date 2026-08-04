@@ -1,11 +1,11 @@
 {
-    "name": "namma_market",
-    "short_name": "namma_market",
+    "name": "Namma MahaRaja Super Market",
+    "short_name": "Namma MahaRaja",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#102138",
+    "theme_color": "#102138",
+    "description": "Chennai grocery delivery in 10 minutes",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
