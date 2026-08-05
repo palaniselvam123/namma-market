@@ -5,29 +5,28 @@ import 'catalog.dart';
 import 'models.dart';
 import 'supabase_config.dart';
 
-/// Local product ids are hand-assigned (1-94). Remote (admin-added) products
-/// get ids offset well past that range so the two id spaces never collide.
-const _remoteIdOffset = 100000;
-
-/// Loads admin-added products from Supabase into [kProducts] on startup,
-/// and notifies listeners so already-built screens can refresh.
+/// The database is the source of truth for the catalog — the built-in
+/// `kProducts` list is seeded into it and only acts as an offline fallback,
+/// so the store console can genuinely edit and remove every product.
 class CatalogStore extends ChangeNotifier {
+  bool loadedFromServer = false;
+
   Future<void> loadRemoteProducts() async {
     try {
-      final rows = await supabase
-          .from('products')
-          .select()
-          .order('created_at');
-      final existingIds = kProducts.map((p) => p.id).toSet();
-      for (final row in rows as List) {
-        final product = _productFromRow(row as Map<String, dynamic>);
-        if (!existingIds.contains(product.id)) {
-          kProducts.add(product);
-        }
-      }
+      final rows = await supabase.from('products').select().order('id');
+      final products = (rows as List)
+          .map((row) => productFromRow(row as Map<String, dynamic>))
+          .toList();
+      if (products.isEmpty) return; // Keep the built-in catalog as fallback.
+
+      kProducts
+        ..clear()
+        ..addAll(products);
+      loadedFromServer = true;
       notifyListeners();
     } catch (_) {
-      // Offline or backend unreachable — app still works with local catalog.
+      // Offline or backend unreachable — app still works with the built-in
+      // catalog compiled into the bundle.
     }
   }
 
@@ -74,20 +73,69 @@ class CatalogStore extends ChangeNotifier {
         .select()
         .single();
 
-    final product = Product(
-      id: _remoteIdOffset + (row['id'] as int),
-      name: name,
-      brand: brand,
-      category: category,
-      emoji: emoji,
-      unit: unit,
-      packLabel: packLabel,
-      price: price,
-      mrp: mrp,
-      image: imageUrl,
-    );
+    final product = productFromRow(row);
     addLocal(product);
     return product;
+  }
+
+  /// Saves edits to an existing product and refreshes it in the local list.
+  Future<Product> updateRemoteProduct({
+    required int id,
+    required String name,
+    required String brand,
+    required String category,
+    required String emoji,
+    required String unit,
+    required String packLabel,
+    required int price,
+    int? mrp,
+    String? flag,
+    Uint8List? newImageBytes,
+  }) async {
+    final patch = <String, dynamic>{
+      'name': name,
+      'brand': brand,
+      'category': category,
+      'emoji': emoji,
+      'unit': unit,
+      'pack_label': packLabel,
+      'price': price,
+      'mrp': mrp,
+      if (flag != null) 'flag': flag,
+    };
+
+    if (newImageBytes != null) {
+      final fileName =
+          '${DateTime.now().microsecondsSinceEpoch}_${name.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.jpg';
+      await supabase.storage
+          .from('product-images')
+          .uploadBinary(fileName, newImageBytes);
+      patch['image_url'] =
+          supabase.storage.from('product-images').getPublicUrl(fileName);
+    }
+
+    final row = await supabase
+        .from('products')
+        .update(patch)
+        .eq('id', id)
+        .select()
+        .single();
+
+    final updated = productFromRow(row);
+    final index = kProducts.indexWhere((p) => p.id == id);
+    if (index >= 0) {
+      kProducts[index] = updated;
+    } else {
+      kProducts.add(updated);
+    }
+    notifyListeners();
+    return updated;
+  }
+
+  Future<void> deleteRemoteProduct(int id) async {
+    await supabase.from('products').delete().eq('id', id);
+    kProducts.removeWhere((p) => p.id == id);
+    notifyListeners();
   }
 
   /// Sends a photo to the analyze-product-photo edge function and returns
@@ -139,10 +187,10 @@ class CatalogStore extends ChangeNotifier {
     return Uint8List.fromList(img.encodeJpg(cropped, quality: 85));
   }
 
-  Product _productFromRow(Map<String, dynamic> row) {
+  Product productFromRow(Map<String, dynamic> row) {
     final variantsJson = row['variants'] as List<dynamic>?;
     return Product(
-      id: _remoteIdOffset + (row['id'] as int),
+      id: row['id'] as int,
       name: row['name'] as String,
       brand: row['brand'] as String,
       category: row['category'] as String,

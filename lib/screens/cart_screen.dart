@@ -336,14 +336,26 @@ class _CartBody extends StatelessWidget {
   }
 
   void _placeOrder(BuildContext context) {
-    showCheckoutSheet(context, () {
-      final order = orderManager.createOrder(
+    showCheckoutSheet(context, () async {
+      // Saving the order hits the network, so hold a blocking spinner until
+      // we have an order code to show — otherwise a slow connection looks
+      // like the Confirm button did nothing.
+      showDialog(
+        context: context,
+        useRootNavigator: false,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final order = await orderManager.placeOrder(
         cartItems: cart.items,
         subtotal: cart.subtotal,
         deliveryFee: cart.deliveryFee,
         total: cart.total,
       );
 
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: false).pop(); // dismiss spinner
       showOrderConfirmation(context, order);
     });
   }
