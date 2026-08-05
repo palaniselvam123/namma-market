@@ -342,7 +342,7 @@ class _OrderRow extends StatelessWidget {
   }
 }
 
-class OrderDetailPanel extends StatelessWidget {
+class OrderDetailPanel extends StatefulWidget {
   final Order order;
   final bool updating;
   final ValueChanged<String> onSetStatus;
@@ -355,9 +355,38 @@ class OrderDetailPanel extends StatelessWidget {
   });
 
   @override
+  State<OrderDetailPanel> createState() => _OrderDetailPanelState();
+}
+
+class _OrderDetailPanelState extends State<OrderDetailPanel> {
+  /// Optimistic status, so the panel reflects the change immediately. On
+  /// mobile this panel is a pushed route holding its own snapshot of the
+  /// order, so it would otherwise keep showing the old status until you
+  /// navigate back.
+  String? _pending;
+
+  @override
+  void didUpdateWidget(OrderDetailPanel old) {
+    super.didUpdateWidget(old);
+    // A different order selected, or the server caught up with us.
+    if (old.order.id != widget.order.id ||
+        widget.order.status == _pending) {
+      _pending = null;
+    }
+  }
+
+  void _select(String status) {
+    setState(() => _pending = status);
+    widget.onSetStatus(status);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = context.c;
-    final accent = accentForStatus(order.status);
+    final order = widget.order;
+    final updating = widget.updating;
+    final currentStatus = _pending ?? order.status;
+    final accent = accentForStatus(currentStatus);
 
     return ListView(
       padding: const EdgeInsets.all(20),
@@ -409,7 +438,7 @@ class OrderDetailPanel extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  orderStatusLabel(order.status),
+                  orderStatusLabel(currentStatus),
                   style: const TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w800,
@@ -459,14 +488,19 @@ class OrderDetailPanel extends StatelessWidget {
                 ],
               );
             }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (var i = 0; i < cards.length; i++) ...[
-                  Expanded(child: cards[i]),
-                  if (i < cards.length - 1) const SizedBox(width: 10),
+            // IntrinsicHeight bounds the row to its tallest card. Without it,
+            // stretch inside a scroll view resolves against an unbounded
+            // height and pushes everything below off the screen.
+            return IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < cards.length; i++) ...[
+                    Expanded(child: cards[i]),
+                    if (i < cards.length - 1) const SizedBox(width: 10),
+                  ],
                 ],
-              ],
+              ),
             );
           },
         ),
@@ -588,9 +622,9 @@ class OrderDetailPanel extends StatelessWidget {
                   for (final status in kOrderStatuses)
                     _StatusButton(
                       status: status,
-                      current: order.status == status,
-                      enabled: !updating && order.status != status,
-                      onTap: () => onSetStatus(status),
+                      current: currentStatus == status,
+                      enabled: !updating && currentStatus != status,
+                      onTap: () => _select(status),
                     ),
                 ],
               ),
