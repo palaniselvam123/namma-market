@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import '../models/order.dart';
+import '../order_manager.dart';
 import '../theme.dart';
 import '../widgets/brand_mark.dart';
+import 'store_customers.dart';
+import 'store_dashboard.dart';
 import 'store_orders.dart';
 import 'store_products.dart';
+import 'store_theme.dart';
 
 /// Below this width the console switches from a desktop rail + master/detail
 /// layout to a stacked, single-column phone layout.
@@ -12,6 +17,13 @@ const double kWideBreakpoint = 900;
 /// the console out of casual reach but is not real authentication — see the
 /// note in lib/screens/admin.dart.
 const _storePassword = 'maharaja2026';
+
+const _sections = [
+  (icon: Icons.dashboard_rounded, label: 'Dashboard', accent: kIndigo),
+  (icon: Icons.receipt_long_rounded, label: 'Orders', accent: kCyan),
+  (icon: Icons.inventory_2_rounded, label: 'Products', accent: kEmerald),
+  (icon: Icons.people_alt_rounded, label: 'Customers', accent: kViolet),
+];
 
 class StoreShell extends StatefulWidget {
   const StoreShell({super.key});
@@ -24,6 +36,39 @@ class _StoreShellState extends State<StoreShell> {
   bool _unlocked = false;
   int _tab = 0;
 
+  // Orders are loaded once here and shared with the dashboard, orders and
+  // customers sections so switching tabs doesn't refetch.
+  List<Order> _orders = [];
+  bool _loading = true;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final orders = await fetchAllOrders();
+      if (!mounted) return;
+      setState(() {
+        _orders = orders;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -32,7 +77,29 @@ class _StoreShellState extends State<StoreShell> {
     }
 
     final wide = MediaQuery.sizeOf(context).width >= kWideBreakpoint;
-    final body = _tab == 0 ? const StoreOrdersView() : const StoreProductsView();
+
+    final body = switch (_tab) {
+      0 => StoreDashboardView(
+          orders: _orders,
+          loading: _loading,
+          error: _error,
+          onRefresh: _load,
+          onSeeOrders: () => setState(() => _tab = 1),
+        ),
+      1 => StoreOrdersView(
+          orders: _orders,
+          loading: _loading,
+          error: _error,
+          onRefresh: _load,
+        ),
+      2 => const StoreProductsView(),
+      _ => StoreCustomersView(
+          orders: _orders,
+          loading: _loading,
+          error: _error,
+          onRefresh: _load,
+        ),
+    };
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -42,6 +109,10 @@ class _StoreShellState extends State<StoreShell> {
                 children: [
                   _SideRail(
                     tab: _tab,
+                    orderCount: _orders
+                        .where((o) =>
+                            o.status != 'delivered' && o.status != 'cancelled')
+                        .length,
                     onSelect: (i) => setState(() => _tab = i),
                   ),
                   Expanded(child: body),
@@ -59,17 +130,12 @@ class _StoreShellState extends State<StoreShell> {
           : NavigationBar(
               selectedIndex: _tab,
               onDestinationSelected: (i) => setState(() => _tab = i),
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.receipt_long_outlined),
-                  selectedIcon: Icon(Icons.receipt_long),
-                  label: 'Orders',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.inventory_2_outlined),
-                  selectedIcon: Icon(Icons.inventory_2),
-                  label: 'Products',
-                ),
+              destinations: [
+                for (final section in _sections)
+                  NavigationDestination(
+                    icon: Icon(section.icon),
+                    label: section.label,
+                  ),
               ],
             ),
     );
@@ -82,12 +148,12 @@ class _MobileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 11, 16, 11),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
-          colors: [kNavyDeep, kNavy],
+          colors: [kNavyDeep, kNavy, kNavyLight],
         ),
       ),
       child: Row(
@@ -126,26 +192,31 @@ class _MobileHeader extends StatelessWidget {
 
 class _SideRail extends StatelessWidget {
   final int tab;
+  final int orderCount;
   final ValueChanged<int> onSelect;
 
-  const _SideRail({required this.tab, required this.onSelect});
+  const _SideRail({
+    required this.tab,
+    required this.orderCount,
+    required this.onSelect,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 232,
+      width: 236,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [kNavyDeep, kNavy, kNavyLight],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [kNavyDeep, kNavy, Color(0xFF23406B)],
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 26),
             child: Row(
               children: [
                 const BrandMark(height: 34, color: kCream),
@@ -177,23 +248,20 @@ class _SideRail extends StatelessWidget {
               ],
             ),
           ),
-          _RailItem(
-            icon: Icons.receipt_long,
-            label: 'Orders',
-            selected: tab == 0,
-            onTap: () => onSelect(0),
-          ),
-          _RailItem(
-            icon: Icons.inventory_2,
-            label: 'Products',
-            selected: tab == 1,
-            onTap: () => onSelect(1),
-          ),
+          for (var i = 0; i < _sections.length; i++)
+            _RailItem(
+              icon: _sections[i].icon,
+              label: _sections[i].label,
+              accent: _sections[i].accent,
+              selected: tab == i,
+              badge: i == 1 && orderCount > 0 ? '$orderCount' : null,
+              onTap: () => onSelect(i),
+            ),
           const Spacer(),
           Padding(
             padding: const EdgeInsets.all(20),
             child: Text(
-              'Namma MahaRaja\nSuper Market',
+              'Namma MahaRaja\nSuper Market · Chennai',
               style: TextStyle(
                 fontSize: 10,
                 height: 1.5,
@@ -210,13 +278,17 @@ class _SideRail extends StatelessWidget {
 class _RailItem extends StatelessWidget {
   final IconData icon;
   final String label;
+  final Accent accent;
   final bool selected;
+  final String? badge;
   final VoidCallback onTap;
 
   const _RailItem({
     required this.icon,
     required this.label,
+    required this.accent,
     required this.selected,
+    required this.badge,
     required this.onTap,
   });
 
@@ -225,29 +297,68 @@ class _RailItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Material(
-        color: selected ? Colors.white.withValues(alpha: .12) : Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: selected ? accent.gradient : null,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: accent.start.withValues(alpha: .45),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]
+                  : null,
+            ),
             child: Row(
               children: [
                 Icon(
                   icon,
                   size: 19,
-                  color: selected ? kGoldLeaf : Colors.white.withValues(alpha: .72),
+                  color: selected
+                      ? Colors.white
+                      : Colors.white.withValues(alpha: .68),
                 ),
                 const SizedBox(width: 12),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
-                    color: selected ? Colors.white : Colors.white.withValues(alpha: .78),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                      color: selected
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: .76),
+                    ),
                   ),
                 ),
+                if (badge != null)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? Colors.white.withValues(alpha: .25)
+                          : kAmber.start,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      badge!,
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -293,7 +404,7 @@ class _StoreLoginState extends State<_StoreLogin> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [kNavyDeep, kNavy, kNavyLight],
+            colors: [kNavyDeep, Color(0xFF13294A), Color(0xFF3B2A6B)],
           ),
         ),
         child: Center(
@@ -305,7 +416,14 @@ class _StoreLoginState extends State<_StoreLogin> {
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
                   color: c.surface,
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: .3),
+                      blurRadius: 40,
+                      offset: const Offset(0, 16),
+                    ),
+                  ],
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -315,14 +433,15 @@ class _StoreLoginState extends State<_StoreLogin> {
                     Text(
                       'Store Console',
                       style: TextStyle(
-                        fontSize: 19,
+                        fontSize: 20,
                         fontWeight: FontWeight.w900,
+                        letterSpacing: -.3,
                         color: c.t0,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Orders and product management',
+                      'Orders, products and customers',
                       style: TextStyle(fontSize: 12.5, color: c.t2),
                     ),
                     const SizedBox(height: 22),
@@ -337,7 +456,11 @@ class _StoreLoginState extends State<_StoreLogin> {
                         filled: true,
                         fillColor: c.bg,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: c.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(color: c.border),
                         ),
                       ),
@@ -345,18 +468,27 @@ class _StoreLoginState extends State<_StoreLogin> {
                     const SizedBox(height: 14),
                     SizedBox(
                       width: double.infinity,
-                      height: 46,
-                      child: FilledButton(
-                        onPressed: _submit,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: kNavy,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                      height: 48,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: kIndigo.gradient,
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Open Console',
-                          style: TextStyle(fontWeight: FontWeight.w800),
+                        child: TextButton(
+                          onPressed: _submit,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text(
+                            'Open Console',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
                       ),
                     ),

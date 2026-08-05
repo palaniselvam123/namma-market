@@ -42,5 +42,73 @@
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
   <script src="flutter_bootstrap.js" async></script>
+
+  <!--
+    Web Push plumbing. Kept in plain JS and exposed on window so the Dart side
+    only has to call one function — PushManager has no first-class Dart binding.
+  -->
+  <script>
+    (function () {
+      var swReady = null;
+
+      function registerPushWorker() {
+        if (!('serviceWorker' in navigator)) return null;
+        if (!swReady) {
+          swReady = navigator.serviceWorker.register('push_sw.js');
+        }
+        return swReady;
+      }
+
+      function urlBase64ToUint8Array(base64String) {
+        var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        var raw = window.atob(base64);
+        var out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+      }
+
+      window.nammaPush = {
+        // 'unsupported' | 'denied' | 'granted' | 'default'
+        status: function () {
+          if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            return 'unsupported';
+          }
+          return Notification.permission;
+        },
+
+        // Returns a JSON string of the subscription, or '' if unavailable.
+        subscribe: function (vapidPublicKey) {
+          if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            return Promise.resolve('');
+          }
+          return Notification.requestPermission()
+            .then(function (permission) {
+              if (permission !== 'granted') return '';
+              var reg = registerPushWorker();
+              if (!reg) return '';
+              return reg
+                .then(function (registration) {
+                  return navigator.serviceWorker.ready.then(function () {
+                    return registration.pushManager.getSubscription().then(function (existing) {
+                      if (existing) return existing;
+                      return registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+                      });
+                    });
+                  });
+                })
+                .then(function (sub) {
+                  return sub ? JSON.stringify(sub.toJSON()) : '';
+                });
+            })
+            .catch(function () {
+              return '';
+            });
+        },
+      };
+    })();
+  </script>
 </body>
 </html>

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'app_state.dart';
 import 'cart.dart';
 import 'catalog_store.dart';
+import 'notifications.dart';
+import 'screens/notifications_sheet.dart';
 import 'screens/cart_screen.dart';
 import 'screens/home.dart';
 import 'screens/profile.dart';
@@ -101,6 +103,46 @@ class _TopBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               Row(
                 children: [
+                  ListenableBuilder(
+                    listenable: notificationCenter,
+                    builder: (context, _) => GestureDetector(
+                      onTap: () => showNotificationsSheet(context),
+                      child: Stack(
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Text('🔔', style: TextStyle(fontSize: 20)),
+                          ),
+                          if (notificationCenter.unreadCount > 0)
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: Container(
+                                constraints:
+                                    const BoxConstraints(minWidth: 16),
+                                height: 16,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: c.green,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  '${notificationCenter.unreadCount}',
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
                   GestureDetector(
                     onTap: () => appState.goTab(2),
                     child: Stack(

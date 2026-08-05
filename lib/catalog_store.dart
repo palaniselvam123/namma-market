@@ -212,7 +212,22 @@ class CatalogStore extends ChangeNotifier {
         (f) => f.name == row['flag'],
         orElse: () => Flag.none,
       ),
+      inStock: row['in_stock'] as bool? ?? true,
     );
+  }
+
+  /// Takes a product off sale (or puts it back) without deleting it.
+  Future<void> setInStock(int id, bool inStock) async {
+    final row = await supabase
+        .from('products')
+        .update({'in_stock': inStock})
+        .eq('id', id)
+        .select()
+        .single();
+    final updated = productFromRow(row);
+    final index = kProducts.indexWhere((p) => p.id == id);
+    if (index >= 0) kProducts[index] = updated;
+    notifyListeners();
   }
 }
 

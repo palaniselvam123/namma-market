@@ -207,6 +207,28 @@ class AddControl extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+
+    // The shop can take an item off sale from the store console; when it
+    // does, the customer can see it but not order it.
+    if (!product.inStock) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: c.surfaceSunk,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: c.border),
+        ),
+        child: Text(
+          'Out of stock',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            color: c.t2,
+          ),
+        ),
+      );
+    }
+
     return ListenableBuilder(
       listenable: cart,
       builder: (context, _) {

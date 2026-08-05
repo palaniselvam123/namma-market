@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/order.dart';
+import '../notifications.dart';
 import '../theme.dart';
 import '../app_state.dart';
 import '../cart.dart';
@@ -231,7 +232,9 @@ void showOrderConfirmation(BuildContext context, Order order) {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 14),
+                          _EnableUpdatesTile(order: order),
+                          const SizedBox(height: 14),
                           GestureDetector(
                             onTap: () {
                               cart.clear();
@@ -295,6 +298,125 @@ void showOrderConfirmation(BuildContext context, Order order) {
       );
     },
   );
+}
+
+/// Opt-in for delivery push notifications. Permission must be requested from
+/// a real tap, so this is a button rather than something that fires on load.
+class _EnableUpdatesTile extends StatefulWidget {
+  final Order order;
+
+  const _EnableUpdatesTile({required this.order});
+
+  @override
+  State<_EnableUpdatesTile> createState() => _EnableUpdatesTileState();
+}
+
+class _EnableUpdatesTileState extends State<_EnableUpdatesTile> {
+  bool _busy = false;
+  bool? _result;
+
+  Future<void> _enable() async {
+    setState(() => _busy = true);
+    final ok = await notificationCenter.enablePush(widget.order.customerPhone);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _result = ok;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    final status = notificationCenter.permissionStatus;
+    final alreadyOn = _result == true || status == 'granted';
+
+    if (status == 'unsupported') return const SizedBox.shrink();
+
+    if (alreadyOn) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: c.greenBg,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.notifications_active, size: 18, color: c.green),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                'You\'ll get a notification at every step of this delivery.',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: c.green,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: _busy ? null : _enable,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: c.primaryBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.primary.withValues(alpha: .35)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.notifications_none, size: 19, color: c.primary),
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Get delivery updates',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: c.primary,
+                        ),
+                      ),
+                      Text(
+                        'Know the moment your order is packed and on its way',
+                        style: TextStyle(fontSize: 10.5, color: c.t2),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_busy)
+                  SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: c.primary),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (_result == false)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Notifications are blocked for this site. You can still see every '
+              'update in the app under the bell icon.',
+              style: TextStyle(fontSize: 10.5, color: c.t2),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _InfoBox extends StatelessWidget {

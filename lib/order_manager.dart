@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'models/order.dart';
 import 'catalog.dart';
+import 'notifications.dart';
 import 'supabase_config.dart';
 
 /// Manages orders for the customer app: keeps the orders placed in this
@@ -122,6 +124,12 @@ class OrderManager extends ChangeNotifier {
 
     _orders.add(order);
     notifyListeners();
+
+    // Start listening for this customer's status updates straight away, so an
+    // open app reflects the shop's changes even before push is granted.
+    if (order.customerPhone.isNotEmpty) {
+      unawaited(notificationCenter.attachToPhone(order.customerPhone));
+    }
     return order;
   }
 
@@ -162,6 +170,57 @@ Future<List<Order>> fetchAllOrders() async {
 
 Future<void> updateOrderStatus(int orderDbId, String status) async {
   await supabase.from('orders').update({'status': status}).eq('id', orderDbId);
+}
+
+/// Customer-facing wording for each step the shop moves an order through.
+({String title, String body}) statusMessage(String status, String orderCode) =>
+    switch (status) {
+      'confirmed' => (
+          title: 'Order confirmed',
+          body: 'We have your order $orderCode and are getting it ready.',
+        ),
+      'packing' => (
+          title: 'Packing your order',
+          body: 'Your items for $orderCode are being packed at the store.',
+        ),
+      'out_for_delivery' => (
+          title: 'Out for delivery',
+          body: 'Order $orderCode is on its way and will arrive shortly.',
+        ),
+      'delivered' => (
+          title: 'Delivered',
+          body: 'Order $orderCode has been delivered. Thank you for shopping!',
+        ),
+      'cancelled' => (
+          title: 'Order cancelled',
+          body: 'Order $orderCode was cancelled. Please contact the store for help.',
+        ),
+      _ => (
+          title: 'Order update',
+          body: 'There is an update on order $orderCode.',
+        ),
+    };
+
+/// Pushes the status change to the customer's device and records it in their
+/// in-app feed. Returns how many devices actually received a push — zero is
+/// normal (they may never have granted permission); the in-app record is
+/// written either way.
+Future<int> notifyCustomerOfStatus(Order order, String status) async {
+  final message = statusMessage(status, order.id);
+  final response = await supabase.functions.invoke(
+    'send-order-notification',
+    body: {
+      'orderId': order.dbId,
+      'orderCode': order.id,
+      'customerPhone': order.customerPhone,
+      'status': status,
+      'title': message.title,
+      'body': message.body,
+    },
+  );
+  final data = response.data;
+  if (data is Map && data['delivered'] is int) return data['delivered'] as int;
+  return 0;
 }
 
 /// Global order manager instance

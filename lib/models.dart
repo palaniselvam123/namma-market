@@ -27,6 +27,10 @@ class Product {
   final List<Variant>? variants; // Multiple pack sizes: [3L ₹392, 500ml ₹149, ...]
   final Flag flag;
 
+  /// The shop can take an item off sale without deleting it; out-of-stock
+  /// products stay in the catalog but can't be added to a cart.
+  final bool inStock;
+
   const Product({
     required this.id,
     required this.name,
@@ -41,6 +45,7 @@ class Product {
     this.images,
     this.variants,
     this.flag = Flag.none,
+    this.inStock = true,
   });
 
   /// Real product photography, resized at the CDN edge. Admin-uploaded

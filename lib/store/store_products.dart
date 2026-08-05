@@ -6,6 +6,7 @@ import '../catalog_store.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../widgets/product_image.dart';
+import 'store_theme.dart';
 import 'store_widgets.dart';
 
 class StoreProductsView extends StatefulWidget {
@@ -35,6 +36,27 @@ class _StoreProductsViewState extends State<StoreProductsView> {
       builder: (_) => ProductEditorDialog(product: product),
     );
     if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleStock(Product product) async {
+    try {
+      await catalogStore.setInStock(product.id, !product.inStock);
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            product.inStock
+                ? '${product.name} marked out of stock'
+                : '${product.name} is back on sale',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not update stock: $e')));
+    }
   }
 
   Future<void> _confirmDelete(Product product) async {
@@ -90,20 +112,28 @@ class _StoreProductsViewState extends State<StoreProductsView> {
           children: [
             StoreHeader(
               title: 'Products',
-              subtitle: '${kProducts.length} in the shop',
+              subtitle: '${kProducts.length} listed · '
+                  '${kProducts.where((p) => !p.inStock).length} out of stock',
+              emoji: '📦',
+              accent: kEmerald,
               onRefresh: () async {
                 await catalogStore.loadRemoteProducts();
                 if (mounted) setState(() {});
               },
-              action: FilledButton.icon(
+              action: TextButton.icon(
                 onPressed: () => _openEditor(),
                 icon: const Icon(Icons.add, size: 18),
                 label: const Text('Add'),
-                style: FilledButton.styleFrom(
-                  backgroundColor: kNavy,
+                style: TextButton.styleFrom(
+                  foregroundColor: kEmerald.start,
+                  backgroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(11),
                   ),
+                  textStyle: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w800),
                 ),
               ),
             ),
@@ -125,42 +155,32 @@ class _StoreProductsViewState extends State<StoreProductsView> {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
+              padding: const EdgeInsets.fromLTRB(18, 0, 18, 10),
               child: StoreSearchField(
                 hint: 'Search by product or brand',
                 onChanged: (v) => setState(() => _query = v),
               ),
             ),
             SizedBox(
-              height: 40,
+              height: 42,
               child: ListView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 18),
                 children: [
-                  for (final cat in kCategories)
-                    GestureDetector(
-                      onTap: () => setState(() => _category = cat.key),
-                      child: Container(
-                        margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 13, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _category == cat.key ? kNavy : c.surface,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: _category == cat.key ? kNavy : c.border,
-                          ),
-                        ),
-                        child: Text(
-                          '${cat.emoji} ${cat.label}',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color:
-                                _category == cat.key ? Colors.white : c.t1,
-                          ),
-                        ),
+                  for (var i = 0; i < kCategories.length; i++)
+                    PillChip(
+                      label:
+                          '${kCategories[i].emoji} ${kCategories[i].label}',
+                      selected: _category == kCategories[i].key,
+                      // Reuse the customer app's per-category colour so the
+                      // two apps agree on what each aisle looks like.
+                      accent: Accent(
+                        kCategories[i].gradient.first,
+                        kCategories[i].gradient.last,
+                        kIndigo.soft,
                       ),
+                      onTap: () =>
+                          setState(() => _category = kCategories[i].key),
                     ),
                 ],
               ),
@@ -173,13 +193,17 @@ class _StoreProductsViewState extends State<StoreProductsView> {
                       body: 'Try a different search or category.',
                     )
                   : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+                      padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
                       itemCount: visible.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, i) => _ProductRow(
-                        product: visible[i],
-                        onEdit: () => _openEditor(product: visible[i]),
-                        onDelete: () => _confirmDelete(visible[i]),
+                      separatorBuilder: (_, _) => const SizedBox(height: 9),
+                      itemBuilder: (context, i) => Rise(
+                        index: i,
+                        child: _ProductRow(
+                          product: visible[i],
+                          onEdit: () => _openEditor(product: visible[i]),
+                          onDelete: () => _confirmDelete(visible[i]),
+                          onToggleStock: () => _toggleStock(visible[i]),
+                        ),
                       ),
                     ),
             ),
@@ -194,55 +218,93 @@ class _ProductRow extends StatelessWidget {
   final Product product;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onToggleStock;
 
   const _ProductRow({
     required this.product,
     required this.onEdit,
     required this.onDelete,
+    required this.onToggleStock,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    return Material(
+    final category = kCategories.firstWhere(
+      (cat) => cat.key == product.category,
+      orElse: () => kCategories.first,
+    );
+    final discount = product.discountPct;
+
+    return Material
+        (
       color: c.surface,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         onTap: onEdit,
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: c.border),
+            boxShadow: softShadow(Theme.of(context).brightness, strength: .6),
           ),
           clipBehavior: Clip.antiAlias,
           child: Row(
             children: [
-              SizedBox(
-                width: 62,
-                height: 62,
-                child: ProductImage(product: product),
+              // Category colour stripe, matching the customer app's aisles.
+              Container(
+                width: 4,
+                height: 76,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: category.gradient,
+                  ),
+                ),
+              ),
+              Opacity(
+                opacity: product.inStock ? 1 : .4,
+                child: SizedBox(
+                  width: 64,
+                  height: 76,
+                  child: ProductImage(product: product),
+                ),
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        product.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: c.t0,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              product.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: product.inStock ? c.t0 : c.t2,
+                              ),
+                            ),
+                          ),
+                          if (!product.inStock) ...[
+                            const SizedBox(width: 6),
+                            _Tag(text: 'OUT OF STOCK', accent: kRose),
+                          ] else if (discount > 0) ...[
+                            const SizedBox(width: 6),
+                            _Tag(text: '$discount% OFF', accent: kEmerald),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
-                        '${product.brand} · ${product.unit}',
+                        '${product.brand} · ${product.unit} · ${category.label}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 11, color: c.t2),
@@ -258,7 +320,7 @@ class _ProductRow extends StatelessWidget {
                   Text(
                     '₹${product.price}',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 15,
                       fontWeight: FontWeight.w900,
                       color: c.t0,
                       fontFeatures: const [FontFeature.tabularFigures()],
@@ -275,19 +337,62 @@ class _ProductRow extends StatelessWidget {
                     ),
                 ],
               ),
+              const SizedBox(width: 6),
+              IconButton(
+                onPressed: onToggleStock,
+                tooltip: product.inStock
+                    ? 'Mark out of stock'
+                    : 'Put back on sale',
+                icon: Icon(
+                  product.inStock
+                      ? Icons.toggle_on_rounded
+                      : Icons.toggle_off_rounded,
+                  size: 26,
+                  color: product.inStock ? kEmerald.start : c.t3,
+                ),
+              ),
               IconButton(
                 onPressed: onEdit,
                 tooltip: 'Edit',
-                icon: Icon(Icons.edit_outlined, size: 18, color: c.t1),
+                icon: Icon(Icons.edit_outlined, size: 18, color: kIndigo.start),
               ),
               IconButton(
                 onPressed: onDelete,
                 tooltip: 'Remove',
-                icon: Icon(Icons.delete_outline, size: 18, color: c.primary),
+                icon: Icon(Icons.delete_outline, size: 18, color: kRose.start),
               ),
               const SizedBox(width: 4),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Tag extends StatelessWidget {
+  final String text;
+  final Accent accent;
+
+  const _Tag({required this.text, required this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: dark ? accent.start.withValues(alpha: .25) : accent.soft,
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: accent.start.withValues(alpha: .3)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 7.5,
+          fontWeight: FontWeight.w900,
+          letterSpacing: .4,
+          color: dark ? Colors.white : accent.start,
         ),
       ),
     );
