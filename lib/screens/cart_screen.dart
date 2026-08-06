@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../address_store.dart';
 import '../app_state.dart';
+import '../auth.dart';
 import '../cart.dart';
 import '../catalog.dart';
 import '../theme.dart';
@@ -8,6 +10,8 @@ import '../widgets/product_image.dart';
 import '../order_manager.dart';
 import '../models/order.dart';
 import 'order_confirmation.dart';
+import 'addresses.dart';
+import 'auth_screen.dart';
 import 'checkout.dart';
 
 class CartScreen extends StatelessWidget {
@@ -124,7 +128,7 @@ class _CartBody extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             children: [
               ListenableBuilder(
-                listenable: orderManager,
+                listenable: Listenable.merge([orderManager, addressStore]),
                 builder: (context, _) {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -148,7 +152,12 @@ class _CartBody extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         GestureDetector(
-                          onTap: () => _showLocationPicker(context),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const AddressesScreen(selecting: true),
+                            ),
+                          ),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -165,7 +174,8 @@ class _CartBody extends StatelessWidget {
                                 Row(
                                   children: [
                                     Text(
-                                      orderManager.selectedLocation.emoji,
+                                      addressStore.selected?.location.emoji ??
+                                          '📍',
                                       style: const TextStyle(fontSize: 18),
                                     ),
                                     const SizedBox(width: 8),
@@ -173,7 +183,9 @@ class _CartBody extends StatelessWidget {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          orderManager.selectedLocation.name,
+                                          addressStore.selected == null
+                                              ? 'Choose delivery address'
+                                              : '${addressStore.selected!.label} · ${addressStore.selected!.area}',
                                           style: TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w700,
@@ -181,7 +193,9 @@ class _CartBody extends StatelessWidget {
                                           ),
                                         ),
                                         Text(
-                                          'Arrives in ${orderManager.selectedLocation.deliveryTimeMinutes} mins',
+                                          addressStore.selected == null
+                                              ? 'Delivered from our $kStoreArea store'
+                                              : 'Arrives in ${addressStore.selected!.location.deliveryTimeMinutes} mins',
                                           style: TextStyle(
                                             fontSize: 10,
                                             color: c.t2,
@@ -336,6 +350,12 @@ class _CartBody extends StatelessWidget {
   }
 
   void _placeOrder(BuildContext context) {
+    // Ordering needs an account — that is where the delivery address, order
+    // history and status notifications all hang off.
+    if (!auth.isSignedIn) {
+      _promptSignIn(context);
+      return;
+    }
     showCheckoutSheet(context, () async {
       // Saving the order hits the network, so hold a blocking spinner until
       // we have an order code to show — otherwise a slow connection looks
@@ -360,107 +380,70 @@ class _CartBody extends StatelessWidget {
     });
   }
 
-  void _showLocationPicker(BuildContext context) {
+  void _promptSignIn(BuildContext context) {
     final c = context.c;
     showDialog(
       context: context,
       useRootNavigator: false,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: c.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Select Delivery Location',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: c.t0,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: c.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('🔑', style: TextStyle(fontSize: 44)),
+              const SizedBox(height: 14),
+              Text(
+                'Sign in to order',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: c.t0,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Your cart is saved. Sign in to add a delivery address and '
+                'track your order.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, height: 1.4, color: c.t1),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: FilledButton(
+                  onPressed: () {
+                    Navigator.pop(dialogContext);
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AuthScreen()),
+                    );
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: c.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Column(
-                    children: [
-                      for (final location in kDeliveryLocations) ...[
-                        GestureDetector(
-                          onTap: () {
-                            orderManager.setDeliveryLocation(location);
-                            Navigator.pop(dialogContext);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: orderManager.selectedLocation.name ==
-                                      location.name
-                                  ? c.primaryBg
-                                  : c.bg,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: orderManager.selectedLocation.name ==
-                                        location.name
-                                    ? c.primary
-                                    : c.border,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Text(
-                                  location.emoji,
-                                  style: const TextStyle(fontSize: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        location.name,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: c.t0,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Arrives in ${location.deliveryTimeMinutes} mins',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: c.t2,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (orderManager.selectedLocation.name ==
-                                    location.name)
-                                  Icon(Icons.check_circle,
-                                      color: c.primary, size: 20),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                    ],
+                  child: const Text(
+                    'Sign in or create account',
+                    style: TextStyle(fontWeight: FontWeight.w800),
                   ),
-                ],
+                ),
               ),
-            ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(
+                  'Keep shopping',
+                  style: TextStyle(fontSize: 13, color: c.t2),
+                ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

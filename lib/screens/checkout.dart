@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import '../address_store.dart';
+import '../auth.dart';
 import '../theme.dart';
 import '../models/order.dart';
 import '../order_manager.dart';
+import 'addresses.dart';
 
 const _paymentMethods = [
   ('📱', 'UPI', 'Google Pay, PhonePe, etc.'),
@@ -29,42 +32,37 @@ class _CheckoutSheet extends StatefulWidget {
 }
 
 class _CheckoutSheetState extends State<_CheckoutSheet> {
-  late final _nameController =
-      TextEditingController(text: orderManager.customerName);
-  late final _phoneController =
-      TextEditingController(text: orderManager.customerPhone);
   bool _attemptedConfirm = false;
 
   @override
-  void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
-    super.dispose();
-  }
-
-  String? get _nameError =>
-      _attemptedConfirm && _nameController.text.trim().isEmpty
-          ? 'Enter your name'
-          : null;
-
-  String? get _phoneError {
-    if (!_attemptedConfirm) return null;
-    final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.isEmpty) return 'Enter your phone number';
-    if (digits.length < 10) return 'Enter a valid 10-digit number';
-    return null;
+  void initState() {
+    super.initState();
+    addressStore.load();
   }
 
   void _confirm() {
     setState(() => _attemptedConfirm = true);
-    if (_nameError != null || _phoneError != null) return;
-
-    orderManager.setCustomer(
-      name: _nameController.text.trim(),
-      phone: _phoneController.text.trim(),
-    );
+    if (addressStore.selected == null) return;
     Navigator.pop(context);
     widget.onConfirm();
+  }
+
+  Future<void> _chooseAddress() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AddressesScreen(selecting: true)),
+    );
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addAddress() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const AddressEditorSheet(),
+    );
+    if (mounted) setState(() {});
   }
 
   @override
@@ -100,117 +98,54 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _CheckoutSection(
-                      title: 'Your Details',
-                      icon: '👤',
-                      content: Column(
-                        children: [
-                          _CheckoutField(
-                            hint: 'Full name',
-                            controller: _nameController,
-                            errorText: _nameError,
-                            onChanged: (_) {
-                              if (_attemptedConfirm) setState(() {});
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          _CheckoutField(
-                            hint: 'Phone number',
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            errorText: _phoneError,
-                            onChanged: (_) {
-                              if (_attemptedConfirm) setState(() {});
-                            },
-                          ),
-                          const SizedBox(height: 6),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'So the store can reach you about this delivery',
-                              style: TextStyle(fontSize: 10.5, color: c.t2),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _CheckoutSection(
-                      title: 'Delivery Address',
-                      icon: '📍',
-                      content: ListenableBuilder(
-                        listenable: orderManager,
-                        builder: (context, _) => GestureDetector(
-                          onTap: () => _showAddressOptions(context),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: c.bg,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: c.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        orderManager.selectedLocation.name,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700,
-                                          color: c.t0,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Delivery in ${orderManager.selectedLocation.deliveryTimeMinutes} mins',
-                                        style: TextStyle(
-                                            fontSize: 11, color: c.t2),
-                                      ),
-                                    ],
-                                  ),
+              child: ListenableBuilder(
+                listenable: Listenable.merge([addressStore, orderManager, auth]),
+                builder: (context, _) {
+                  final address = addressStore.selected;
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _CheckoutSection(
+                          title: 'Deliver to',
+                          icon: '📍',
+                          content: address == null
+                              ? _NoAddress(
+                                  showError: _attemptedConfirm,
+                                  onAdd: _addAddress,
+                                )
+                              : _SelectedAddress(
+                                  address: address,
+                                  onChange: _chooseAddress,
                                 ),
-                                Icon(Icons.chevron_right, color: c.t2, size: 20),
+                        ),
+                        const SizedBox(height: 16),
+                        _CheckoutSection(
+                          title: 'Payment Method',
+                          icon: '💳',
+                          content: Column(
+                            children: [
+                              for (final (icon, label, description)
+                                  in _paymentMethods) ...[
+                                _PaymentOption(
+                                  icon: icon,
+                                  label: label,
+                                  description: description,
+                                  selected:
+                                      orderManager.paymentMethod == label,
+                                  onTap: () =>
+                                      orderManager.setPaymentMethod(label),
+                                ),
+                                const SizedBox(height: 8),
                               ],
-                            ),
+                            ],
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    _CheckoutSection(
-                      title: 'Payment Method',
-                      icon: '💳',
-                      content: ListenableBuilder(
-                        listenable: orderManager,
-                        builder: (context, _) => Column(
-                          children: [
-                            for (final (icon, label, description)
-                                in _paymentMethods) ...[
-                              _PaymentOption(
-                                icon: icon,
-                                label: label,
-                                description: description,
-                                selected: orderManager.paymentMethod == label,
-                                onTap: () =>
-                                    orderManager.setPaymentMethod(label),
-                              ),
-                              const SizedBox(height: 8),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
             Padding(
@@ -252,46 +187,143 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   }
 }
 
-class _CheckoutField extends StatelessWidget {
-  final String hint;
-  final TextEditingController controller;
-  final TextInputType? keyboardType;
-  final String? errorText;
-  final ValueChanged<String>? onChanged;
+class _SelectedAddress extends StatelessWidget {
+  final Address address;
+  final VoidCallback onChange;
 
-  const _CheckoutField({
-    required this.hint,
-    required this.controller,
-    this.keyboardType,
-    this.errorText,
-    this.onChanged,
-  });
+  const _SelectedAddress({required this.address, required this.onChange});
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      onChanged: onChanged,
-      style: const TextStyle(fontSize: 13),
-      decoration: InputDecoration(
-        hintText: hint,
-        errorText: errorText,
-        isDense: true,
-        filled: true,
-        fillColor: c.bg,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: c.border),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: c.bg,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: c.border),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(iconForLabel(address.label), size: 17, color: c.primary),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      address.label,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w800,
+                        color: c.t0,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      address.formatted,
+                      style:
+                          TextStyle(fontSize: 12, height: 1.35, color: c.t1),
+                    ),
+                    if (address.recipientName.isNotEmpty ||
+                        address.phone.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        [address.recipientName, address.phone]
+                            .where((s) => s.isNotEmpty)
+                            .join(' · '),
+                        style: TextStyle(fontSize: 11.5, color: c.t2),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: onChange,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text('Change', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: c.border),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const Text('🛵', style: TextStyle(fontSize: 15)),
+            const SizedBox(width: 6),
+            Text(
+              'Arrives in about ${address.location.deliveryTimeMinutes} mins from our $kStoreArea store',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: c.green,
+              ),
+            ),
+          ],
         ),
-      ),
+      ],
+    );
+  }
+}
+
+class _NoAddress extends StatelessWidget {
+  final bool showError;
+  final VoidCallback onAdd;
+
+  const _NoAddress({required this.showError, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Add where we should deliver this order.',
+          style: TextStyle(fontSize: 12.5, color: c.t2),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: OutlinedButton.icon(
+            onPressed: onAdd,
+            icon: Icon(Icons.add_location_alt_outlined,
+                size: 17, color: c.primary),
+            label: Text(
+              'Add delivery address',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: c.primary,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(
+                  color: showError ? c.primary : c.border,
+                  width: showError ? 1.5 : 1),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(11),
+              ),
+            ),
+          ),
+        ),
+        if (showError) ...[
+          const SizedBox(height: 7),
+          Text(
+            'An address is needed before we can deliver.',
+            style: TextStyle(fontSize: 11.5, color: c.primary),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -398,94 +430,4 @@ class _PaymentOption extends StatelessWidget {
       ),
     );
   }
-}
-
-void _showAddressOptions(BuildContext context) {
-  final c = context.c;
-  showDialog(
-    context: context,
-    useRootNavigator: false,
-    builder: (dialogContext) {
-      return Dialog(
-        backgroundColor: c.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Select Delivery Location',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: c.t0,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                for (final location in kDeliveryLocations) ...[
-                  GestureDetector(
-                    onTap: () {
-                      orderManager.setDeliveryLocation(location);
-                      Navigator.pop(dialogContext);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        color:
-                            orderManager.selectedLocation.name == location.name
-                                ? c.primaryBg
-                                : c.bg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: orderManager.selectedLocation.name ==
-                                  location.name
-                              ? c.primary
-                              : c.border,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Text(location.emoji,
-                              style: const TextStyle(fontSize: 20)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  location.name,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: c.t0,
-                                  ),
-                                ),
-                                Text(
-                                  'Arrives in ${location.deliveryTimeMinutes} mins',
-                                  style:
-                                      TextStyle(fontSize: 11, color: c.t2),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (orderManager.selectedLocation.name ==
-                              location.name)
-                            Icon(Icons.check_circle, color: c.primary, size: 20),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-            ),
-          ),
-        ),
-      );
-    },
-  );
 }

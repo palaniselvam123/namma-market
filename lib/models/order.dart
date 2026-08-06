@@ -65,6 +65,10 @@ class Order {
   final String customerName;
   final String customerPhone;
   final String paymentMethod;
+
+  /// Full street address snapshotted at checkout, so the shop still sees
+  /// where an order went even if the shopper later edits that address.
+  final String? deliveryAddress;
   final int subtotal;
   final int deliveryFee;
   final int total;
@@ -80,6 +84,7 @@ class Order {
     this.customerName = 'Guest',
     this.customerPhone = '',
     this.paymentMethod = 'UPI',
+    this.deliveryAddress,
     required this.subtotal,
     required this.deliveryFee,
     required this.total,
@@ -98,6 +103,7 @@ class Order {
         customerName: customerName,
         customerPhone: customerPhone,
         paymentMethod: paymentMethod,
+        deliveryAddress: deliveryAddress,
         subtotal: subtotal,
         deliveryFee: deliveryFee,
         total: total,
@@ -122,6 +128,7 @@ class Order {
       customerName: row['customer_name'] as String? ?? 'Guest',
       customerPhone: row['customer_phone'] as String? ?? '',
       paymentMethod: row['payment_method'] as String? ?? 'UPI',
+      deliveryAddress: row['delivery_address'] as String?,
       subtotal: row['subtotal'] as int,
       deliveryFee: row['delivery_fee'] as int? ?? 0,
       total: row['total'] as int,
@@ -153,16 +160,26 @@ String orderStatusLabel(String status) => switch (status) {
       _ => 'Pending',
     };
 
-/// List of delivery locations in Chennai
+/// Where the shop physically is. Everything the app delivers to is measured
+/// out from here.
+const kStoreArea = 'Kovur';
+const kStorePincode = '600122';
+const kStoreAddress = 'Kovur, Chennai $kStorePincode';
+
+/// Delivery zones around the Kovur store, ordered by how quickly a rider can
+/// reach them. These are the neighbouring areas along Kundrathur Road and
+/// towards Porur — nothing further out is served.
 const List<DeliveryLocation> kDeliveryLocations = [
-  DeliveryLocation('T. Nagar', '🏪', 10),
-  DeliveryLocation('Kodambakkam', '🏢', 12),
-  DeliveryLocation('Mylapore', '🏘️', 8),
-  DeliveryLocation('Besant Nagar', '🌆', 9),
-  DeliveryLocation('Adyar', '🌳', 11),
-  DeliveryLocation('Alwarpet', '🏬', 10),
-  DeliveryLocation('Triplicane', '🏛️', 13),
-  DeliveryLocation('Teynampet', '🌃', 12),
+  DeliveryLocation('Kovur', '🏪', 8),
+  DeliveryLocation('Kolapakkam', '🌳', 10),
+  DeliveryLocation('Gerugambakkam', '🏘️', 11),
+  DeliveryLocation('Moulivakkam', '🏢', 13),
+  DeliveryLocation('Kundrathur', '🛕', 14),
+  DeliveryLocation('Mangadu', '🌾', 16),
+  DeliveryLocation('Iyyappanthangal', '🏬', 17),
+  DeliveryLocation('Porur', '🌆', 18),
+  DeliveryLocation('Madananthapuram', '🏡', 15),
+  DeliveryLocation('Ramapuram', '🌃', 20),
 ];
 
 String generateOrderId() {

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'address_store.dart';
+import 'auth.dart';
 import 'models/order.dart';
 import 'catalog.dart';
 import 'notifications.dart';
@@ -59,21 +61,39 @@ class OrderManager extends ChangeNotifier {
       );
     }).toList();
 
+    // Identity and destination now come from the signed-in account and the
+    // address they chose, falling back to whatever was typed in for anyone
+    // still checking out without saved details.
+    final address = addressStore.selected;
+    final profile = auth.profile;
+
+    final name = (address?.recipientName.trim().isNotEmpty ?? false)
+        ? address!.recipientName.trim()
+        : (profile?.displayName ??
+            (_customerName.trim().isEmpty ? 'Guest' : _customerName.trim()));
+    final phone = (address?.phone.trim().isNotEmpty ?? false)
+        ? address!.phone.trim()
+        : (profile?.phone.trim().isNotEmpty ?? false)
+            ? profile!.phone.trim()
+            : _customerPhone.trim();
+
+    final location = address?.location ?? _selectedLocation;
     final now = DateTime.now();
-    final eta = now.add(Duration(minutes: _selectedLocation.deliveryTimeMinutes));
+    final eta = now.add(Duration(minutes: location.deliveryTimeMinutes));
     final code = generateOrderId();
 
     var order = Order(
       id: code,
       createdAt: now,
       items: items,
-      customerName: _customerName.trim().isEmpty ? 'Guest' : _customerName.trim(),
-      customerPhone: _customerPhone.trim(),
+      customerName: name,
+      customerPhone: phone,
       paymentMethod: _paymentMethod,
+      deliveryAddress: address?.formatted,
       subtotal: subtotal,
       deliveryFee: deliveryFee,
       total: total,
-      deliveryLocation: _selectedLocation,
+      deliveryLocation: location,
       estimatedDelivery: eta,
       status: 'confirmed',
     );
@@ -85,8 +105,10 @@ class OrderManager extends ChangeNotifier {
             'order_code': code,
             'customer_name': order.customerName,
             'customer_phone': order.customerPhone,
-            'delivery_location': _selectedLocation.name,
-            'delivery_minutes': _selectedLocation.deliveryTimeMinutes,
+            'delivery_location': location.name,
+            'delivery_minutes': location.deliveryTimeMinutes,
+            'delivery_address': order.deliveryAddress,
+            'user_id': auth.userId,
             'payment_method': order.paymentMethod,
             'subtotal': subtotal,
             'delivery_fee': deliveryFee,
@@ -110,10 +132,11 @@ class OrderManager extends ChangeNotifier {
         customerName: order.customerName,
         customerPhone: order.customerPhone,
         paymentMethod: order.paymentMethod,
+        deliveryAddress: order.deliveryAddress,
         subtotal: subtotal,
         deliveryFee: deliveryFee,
         total: total,
-        deliveryLocation: _selectedLocation,
+        deliveryLocation: location,
         estimatedDelivery: eta,
         status: 'confirmed',
       );

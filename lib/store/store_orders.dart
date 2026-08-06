@@ -467,6 +467,7 @@ class _OrderDetailPanelState extends State<OrderDetailPanel> {
                 title: 'Delivery',
                 accent: kCyan,
                 lines: [
+                  if (order.deliveryAddress != null) order.deliveryAddress!,
                   order.deliveryLocation.name,
                   'ETA ${formatTime(order.estimatedDelivery)}',
                 ],

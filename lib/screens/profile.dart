@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import '../app_state.dart';
+import '../address_store.dart';
+import '../auth.dart';
+import '../cart.dart';
+import '../models/order.dart';
 import '../theme.dart';
 import '../widgets/brand_mark.dart';
+import 'addresses.dart';
 import 'admin.dart';
 import 'orders.dart';
 
@@ -39,7 +45,9 @@ class ProfileScreen extends StatelessWidget {
         );
         break;
       case 1: // Delivery Addresses
-        _showComingSoon(context, 'Delivery Addresses');
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const AddressesScreen()),
+        );
         break;
       case 2: // Payment Methods
         _showComingSoon(context, 'Payment Methods');
@@ -59,6 +67,37 @@ class ProfileScreen extends StatelessWidget {
         );
         break;
     }
+  }
+
+  Future<void> _confirmSignOut(BuildContext context) async {
+    final c = context.c;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: c.surface,
+        title: const Text('Sign out?'),
+        content: const Text(
+          'Your saved addresses stay on your account for next time.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: c.primary),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await auth.signOut();
+    addressStore.clear();
+    cart.clear();
+    appState.goTab(0);
   }
 
   void _showComingSoon(BuildContext context, String feature) {
@@ -119,7 +158,16 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: auth,
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     final c = context.c;
+    final signedIn = auth.isSignedIn;
+    final profile = auth.profile;
     return Container(
       color: c.bg,
       child: ListView(
@@ -148,37 +196,56 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                   alignment: Alignment.center,
-                  child: const BrandMark(height: 42, color: kCream),
+                  child: signedIn
+                      ? Text(
+                          profile?.initials ?? '?',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                            color: kCream,
+                          ),
+                        )
+                      : const BrandMark(height: 42, color: kCream),
                 ),
                 const SizedBox(width: 14),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Karthik Rajan',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        signedIn ? (profile?.displayName ?? 'Shopper') : 'Guest',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '+91 98401 23456',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.white.withValues(alpha: .75),
+                      const SizedBox(height: 2),
+                      Text(
+                        signedIn
+                            ? (profile?.phone.isNotEmpty ?? false
+                                ? profile!.phone
+                                : profile?.email ?? '')
+                            : 'Sign in to order and save addresses',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: .75),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'MahaRaja Club Member ✦',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.white.withValues(alpha: .6),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Delivering from $kStoreArea ✦',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.white.withValues(alpha: .6),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -214,8 +281,14 @@ class ProfileScreen extends StatelessWidget {
                   const SizedBox(height: 6),
                 ],
                 GestureDetector(
-                  onTap: () {},
-                  child: _MenuItem(emoji: '🚪', label: 'Sign Out', danger: true),
+                  onTap: () => signedIn
+                      ? _confirmSignOut(context)
+                      : appState.goTab(0),
+                  child: _MenuItem(
+                    emoji: signedIn ? '🚪' : '🔑',
+                    label: signedIn ? 'Sign Out' : 'Sign In',
+                    danger: signedIn,
+                  ),
                 ),
               ],
             ),

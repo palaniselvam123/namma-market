@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../app_state.dart';
 import '../catalog.dart';
 import '../models.dart';
+import '../address_store.dart';
+import '../models/order.dart';
 import '../theme.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/category_tile.dart';
@@ -88,12 +90,24 @@ class _Header extends StatelessWidget {
                   color: kCream.withValues(alpha: .65),
                 ),
               ),
-              const Text(
-                'T. Nagar, Chennai 600017',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: kCream,
+              Flexible(
+                child: ListenableBuilder(
+                  listenable: addressStore,
+                  builder: (context, _) {
+                    final address = addressStore.selected;
+                    return Text(
+                      address == null
+                          ? '$kStoreArea, Chennai $kStorePincode'
+                          : '${address.label} · ${address.area}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: kCream,
+                      ),
+                    );
+                  },
                 ),
               ),
               Text(

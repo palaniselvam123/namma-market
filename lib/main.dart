@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'address_store.dart';
 import 'app_state.dart';
+import 'auth.dart';
 import 'cart.dart';
 import 'catalog_store.dart';
 import 'notifications.dart';
+import 'screens/auth_screen.dart';
 import 'screens/notifications_sheet.dart';
 import 'screens/cart_screen.dart';
 import 'screens/home.dart';
@@ -15,6 +18,7 @@ import 'widgets/phone_frame.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initSupabase();
+  await auth.init();
   runApp(const NammaMarketApp());
   // Fire-and-forget: don't block first paint on the network round trip.
   catalogStore.loadRemoteProducts();
@@ -36,10 +40,51 @@ class NammaMarketApp extends StatelessWidget {
           // frame instead of spanning the whole browser window.
           child: Navigator(
             onGenerateRoute: (_) =>
-                MaterialPageRoute(builder: (_) => const Shell()),
+                MaterialPageRoute(builder: (_) => const _Entry()),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Decides between the sign-in screen and the shop. Browsing without an
+/// account is allowed — the gate comes back at checkout — which is how the
+/// mainstream grocery apps handle it.
+class _Entry extends StatefulWidget {
+  const _Entry();
+
+  @override
+  State<_Entry> createState() => _EntryState();
+}
+
+class _EntryState extends State<_Entry> {
+  bool _guest = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: auth,
+      builder: (context, _) {
+        if (!auth.ready) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (!auth.isSignedIn && !_guest) {
+          return AuthScreen(
+            onBrowseAsGuest: () => setState(() => _guest = true),
+          );
+        }
+        if (auth.isSignedIn) {
+          // Pull the shopper's saved addresses and past order updates in the
+          // background so checkout and the bell are ready when they get there.
+          addressStore.load();
+          final phone = auth.profile?.phone ?? '';
+          if (phone.isNotEmpty) notificationCenter.attachToPhone(phone);
+        }
+        return const Shell();
+      },
     );
   }
 }
