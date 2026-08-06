@@ -69,6 +69,39 @@ class _StoreShellState extends State<StoreShell> {
     }
   }
 
+  /// Locks the console back to the password screen. Staff share a device on
+  /// the shop floor, so there has to be a way out without closing the tab.
+  Future<void> _lock() async {
+    final c = context.c;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: c.surface,
+        title: const Text('Lock console?'),
+        content: const Text(
+          'The staff password will be needed to get back in.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(backgroundColor: kIndigo.start),
+            child: const Text('Lock'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _unlocked = false;
+      _tab = 0;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.c;
@@ -114,13 +147,14 @@ class _StoreShellState extends State<StoreShell> {
                             o.status != 'delivered' && o.status != 'cancelled')
                         .length,
                     onSelect: (i) => setState(() => _tab = i),
+                    onLock: _lock,
                   ),
                   Expanded(child: body),
                 ],
               )
             : Column(
                 children: [
-                  const _MobileHeader(),
+                  _MobileHeader(onLock: _lock),
                   Expanded(child: body),
                 ],
               ),
@@ -143,7 +177,9 @@ class _StoreShellState extends State<StoreShell> {
 }
 
 class _MobileHeader extends StatelessWidget {
-  const _MobileHeader();
+  final VoidCallback onLock;
+
+  const _MobileHeader({required this.onLock});
 
   @override
   Widget build(BuildContext context) {
@@ -184,6 +220,15 @@ class _MobileHeader extends StatelessWidget {
               ],
             ),
           ),
+          IconButton(
+            onPressed: onLock,
+            tooltip: 'Lock console',
+            icon: Icon(
+              Icons.lock_outline,
+              size: 20,
+              color: Colors.white.withValues(alpha: .85),
+            ),
+          ),
         ],
       ),
     );
@@ -194,11 +239,13 @@ class _SideRail extends StatelessWidget {
   final int tab;
   final int orderCount;
   final ValueChanged<int> onSelect;
+  final VoidCallback onLock;
 
   const _SideRail({
     required this.tab,
     required this.orderCount,
     required this.onSelect,
+    required this.onLock,
   });
 
   @override
@@ -259,9 +306,42 @@ class _SideRail extends StatelessWidget {
             ),
           const Spacer(),
           Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+            child: Material(
+              color: Colors.white.withValues(alpha: .08),
+              borderRadius: BorderRadius.circular(11),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(11),
+                onTap: onLock,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.lock_outline,
+                        size: 18,
+                        color: Colors.white.withValues(alpha: .8),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Lock console',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white.withValues(alpha: .85),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 18),
             child: Text(
-              'Namma MahaRaja\nSuper Market · Chennai',
+              'Namma MahaRaja\nSuper Market · $kStoreArea',
               style: TextStyle(
                 fontSize: 10,
                 height: 1.5,
